@@ -219,6 +219,11 @@ pub(crate) fn apply_filter_to_surface_in(
     if id == crate::plugin_cmds::RUN {
         return Ok(crate::plugin_cmds::apply_to_surface(id, params, surf, selection, canvas));
     }
+    // SpektraFilm 光谱胶片模拟（原生 crate，智能滤镜重渲染路径）。
+    #[cfg(not(target_arch = "wasm32"))]
+    if id == crate::spektra_cmds::FILM_SIM {
+        return crate::spektra_cmds::apply_to_surface(params, surf, bounds, selection, canvas, ctx);
+    }
     let Some(mut fp) = params_for(id, params) else { return Ok(None) };
     // A map that can no longer be read (moved or deleted since) leaves the pixels alone, like an
     // unknown filter; the command itself already refused an unreadable map when it was added.
@@ -268,6 +273,11 @@ fn edits_transparency(filter: &FilterParams, layer: &Layer) -> bool {
 
 pub(crate) fn run_filter(s: &mut Session, id: &str, p: &Value) -> Result<Value> {
     validate_params(id, p)?;
+    // SpektraFilm 光谱胶片模拟：原生 crate 实现，不经 FilterParams。
+    #[cfg(not(target_arch = "wasm32"))]
+    if id == crate::spektra_cmds::FILM_SIM {
+        return crate::spektra_cmds::run(s, p);
+    }
     // Session state some filters read (colours) becomes explicit params; external inputs resolve here.
     let mut prepared = crate::filters_ext::prepare(s, id, p);
     if id == "filter.distort.displace" {
@@ -472,7 +482,7 @@ macro_rules! filter_cmd {
 
 /// The filter command specs.
 pub fn specs() -> Vec<CommandSpec> {
-    vec![
+    let mut specs = vec![
         filter_cmd!("filter.blur.gaussianBlur", "Gaussian Blur…", ["Filter", "Blur"], r##"{"radius":0.1..1000=1}"##),
         filter_cmd!("filter.blur.average", "Average", ["Filter", "Blur"], "{}"),
         filter_cmd!("filter.blur.blur", "Blur", ["Filter", "Blur"], "{}"),
@@ -559,14 +569,48 @@ pub fn specs() -> Vec<CommandSpec> {
             },
             journal: true,
         },
-    ]
+    ];
+    // SpektraFilm 光谱胶片模拟（原生 crate，不参与 wasm 构建）。
+    #[cfg(not(target_arch = "wasm32"))]
+    specs.push(CommandSpec {
+        id: crate::spektra_cmds::FILM_SIM,
+        label: "Film Simulation…",
+        menu: &["Filter", "SpektraFilm"],
+        shortcut: None,
+        params: r##"{"film":text,"paper":text,"ev":-4..4=0,"printChain":bool=false}"##,
+        enabled: has_filterable_layer,
+        run: |s, p| run_filter(s, crate::spektra_cmds::FILM_SIM, p),
+        journal: true,
+    });
+    specs
 }
 
 /// The most recent filter command in the session journal, retargeted at the active layer: dialogs
 /// such as the Filter Gallery record the layer they ran on, and Last Filter applies to the
 /// current layer, as in Photoshop (#1270).
+///
+/// SpektraFilm is a filter-level command without a `FilterParams` kind (native crate, not
+/// part of the wasm build), so it is recognised through this predicate instead.
+#[cfg(not(target_arch = "wasm32"))]
+fn is_spektra_filter(id: &str) -> bool {
+    id == crate::spektra_cmds::FILM_SIM
+}
+
+#[cfg(target_arch = "wasm32")]
+fn is_spektra_filter(_id: &str) -> bool {
+    false
+}
+
 pub fn last_filter(s: &Session) -> Option<(String, Value)> {
-    let (id, mut params) = s.journal.iter().rev().find(|(id, _)| params_for(id, &Value::Null).is_some() && id.starts_with("filter.")).cloned()?;
+    let (id, mut params) = s
+        .journal
+        .iter()
+        .rev()
+        .find(|(id, _)| {
+            id.starts_with("filter.")
+                && (params_for(id, &Value::Null).is_some() || is_spektra_filter(id))
+        })
+        .cloned()?;
     if let Value::Object(m) = &mut params {
         m.remove("layer");
         m.remove("target");

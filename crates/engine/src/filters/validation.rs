@@ -10,6 +10,7 @@ enum Rule {
     Unsigned(u64),
     Choice(&'static str),
     Bool,
+    Str,
 }
 
 impl Rule {
@@ -19,6 +20,7 @@ impl Rule {
             Self::Unsigned(max) => value.as_u64().is_some_and(|n| n <= max),
             Self::Choice(choices) => value.as_str().is_some_and(|s| choices.split('|').any(|choice| choice == s)),
             Self::Bool => value.is_boolean(),
+            Self::Str => value.as_str().is_some_and(|s| !s.trim().is_empty()),
         }
     }
 
@@ -29,6 +31,7 @@ impl Rule {
             Self::Unsigned(max) => format!("an integer in 0..{max}"),
             Self::Choice(choices) => format!("one of {choices}"),
             Self::Bool => "a boolean".into(),
+            Self::Str => "a nonempty string".into(),
         }
     }
 }
@@ -36,7 +39,7 @@ impl Rule {
 // The bounds and choices are the filters' public dialog-unit contract. Defaults remain in
 // params_for; gallery filters are checked in gallery_cmds.
 fn fields(id: &str) -> Option<&'static [(&'static str, Rule)]> {
-    use Rule::{Bool, Choice, Number, Unsigned};
+    use Rule::{Bool, Choice, Number, Str, Unsigned};
     Some(match id {
         "filter.blur.gaussianBlur" | "filter.other.highPass" => &[("radius", Number(0.1, 1000.0))],
         "filter.blur.boxBlur" => &[("radius", Number(1.0, 2000.0))],
@@ -93,6 +96,13 @@ fn fields(id: &str) -> Option<&'static [(&'static str, Rule)]> {
             ("horizontal", Number(f64::MIN, f64::MAX)),
             ("vertical", Number(f64::MIN, f64::MAX)),
             ("undefinedAreas", Choice("wrap|repeat|transparent")),
+        ],
+        // SpektraFilm 光谱胶片模拟（原生 crate；stock 名经资产目录解析，对话框为文本输入）。
+        "filter.spektra.filmSim" => &[
+            ("film", Str),
+            ("paper", Str),
+            ("ev", Number(-4.0, 4.0)),
+            ("printChain", Bool),
         ],
         "filter.blur.average"
         | "filter.blur.blur"

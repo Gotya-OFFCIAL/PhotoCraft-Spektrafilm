@@ -20,6 +20,9 @@ pub mod display_color;
 pub mod doc_path;
 pub mod filters;
 pub mod filters_ext;
+// SpektraFilm 光谱胶片模拟（spektra-core 含 rayon，仅非 wasm 构建）。
+#[cfg(not(target_arch = "wasm32"))]
+mod spektra_cmds;
 mod group_options;
 pub mod guide_layout;
 pub mod hidden_target;

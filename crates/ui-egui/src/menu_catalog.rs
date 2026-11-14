@@ -645,6 +645,7 @@ pub static CATALOG: &[(&[&str], &str, Option<&str>, &str)] = &[
     (&["Filter", "Other"], "Maximum…", None, "filter.other.maximum"),
     (&["Filter", "Other"], "Minimum…", None, "filter.other.minimum"),
     (&["Filter", "Other"], "Offset…", None, "filter.other.offset"),
+    (&["Filter", "SpektraFilm"], "Film Simulation…", None, "filter.spektra.filmSim"),
     (&["View", "Proof Setup"], "Custom…", None, "view.proofSetup.custom"),
     (&["View", "Proof Setup"], "---", None, "---"),
     (&["View", "Proof Setup"], "Working CMYK", None, "view.proofSetup.workingCmyk"),

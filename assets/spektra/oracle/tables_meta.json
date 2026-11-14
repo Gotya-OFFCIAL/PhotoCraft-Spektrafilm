@@ -1,0 +1,41 @@
+{
+  "cmfs": {
+    "shape": [
+      81,
+      3
+    ],
+    "wavelengths": [
+      380.0,
+      780.0,
+      5
+    ]
+  },
+  "illuminants": {
+    "order": [
+      "D55",
+      "D50",
+      "TH-KG3"
+    ],
+    "shape": [
+      3,
+      81
+    ]
+  },
+  "spectra_lut": {
+    "shape": [
+      192,
+      192,
+      81
+    ]
+  },
+  "raw_lut": {
+    "shape": [
+      192,
+      192,
+      3
+    ],
+    "film": "kodak_portra_400",
+    "window": "erf4",
+    "surface": false
+  }
+}

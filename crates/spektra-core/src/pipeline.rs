@@ -34,7 +34,8 @@ pub fn expose(rgb: [f64; 3], raw_lut: &RawLut, tables: &Tables) -> [f64; 3] {
 /// 负片直扫管线：持有合成好的 raw LUT。
 pub struct NegativeScanPipeline {
     pub profile: FilmProfile,
-    pub tables: Tables,
+    /// 共享的 oracle 静态表（30MB 级）：多管线复用同一份 Arc，避免按 (film, paper) 组合重复加载。
+    pub tables: std::sync::Arc<Tables>,
     raw_lut: RawLut,
     /// DIR 成色剂（None = 关闭，M1 语义；Some = 开启，M2-C）
     pub couplers: Option<crate::couplers::DirCouplers>,
@@ -51,7 +52,8 @@ pub struct NegativeScanPipeline {
 impl NegativeScanPipeline {
     /// 用光谱 LUT + 灵敏度 + erf4 窗合成 raw LUT（D55 参考光源）。
     /// 合成正确性由 upsampling 模块对 oracle raw_lut 的对拍测试保证。
-    pub fn new(profile: FilmProfile, tables: Tables) -> Self {
+    pub fn new(profile: FilmProfile, tables: impl Into<std::sync::Arc<Tables>>) -> Self {
+        let tables = tables.into();
         let sensitivity = profile.sensitivity_linear();
         let wl: Vec<f64> = profile.data.wavelengths.clone();
         let window: Vec<[f64; 3]> = match profile.data.window_params.len() {
@@ -83,7 +85,11 @@ impl NegativeScanPipeline {
     }
 
     /// 直接使用预合成 LUT（oracle raw_lut 校验用）。
-    pub fn with_raw_lut(profile: FilmProfile, tables: Tables, raw_lut: RawLut) -> Self {
+    pub fn with_raw_lut(
+        profile: FilmProfile,
+        tables: impl Into<std::sync::Arc<Tables>>,
+        raw_lut: RawLut,
+    ) -> Self {
         let mut s = Self::new(profile, tables);
         s.raw_lut = raw_lut;
         s
@@ -167,7 +173,8 @@ impl NegativeScanPipeline {
 pub struct PrintPipeline {
     pub film: FilmProfile,
     pub paper: FilmProfile,
-    pub tables: Tables,
+    /// 共享的 oracle 静态表（30MB 级）：与 NegativeScanPipeline 复用同一份 Arc。
+    pub tables: std::sync::Arc<Tables>,
     raw_lut: RawLut,
     factor_midgray: f64,
     /// 数据库解析出的放大机中性滤色（print_stock × illuminant × film_stock）
@@ -185,7 +192,12 @@ pub struct PrintPipeline {
 }
 
 impl PrintPipeline {
-    pub fn new(film: FilmProfile, paper: FilmProfile, tables: Tables) -> Self {
+    pub fn new(
+        film: FilmProfile,
+        paper: FilmProfile,
+        tables: impl Into<std::sync::Arc<Tables>>,
+    ) -> Self {
+        let tables = tables.into();
         let sensitivity = film.sensitivity_linear();
         let wl: Vec<f64> = film.data.wavelengths.clone();
         let window: Vec<[f64; 3]> = match film.data.window_params.len() {

@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use serde_json::Value;
 use spektra_core::pipeline::{decode_srgb_f64, NegativeScanPipeline, PrintPipeline};
-use spektra_core::profile::{load_profile, load_tables};
+use spektra_core::profile::load_profile;
 
 use photocraft_color::ColorMode;
 use photocraft_doc::LayerContent;
@@ -86,16 +86,36 @@ fn cache() -> &'static Mutex<HashMap<String, Arc<Pipeline>>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// oracle 静态表全局单例（30MB 级）：所有 (film, paper, printChain) 组合共享一份，
+/// 避免按组合重复加载导致内存随切换线性增长。首次成功加载后固化 assets 根；
+/// 加载失败不缓存，下次调用重试。
+fn tables() -> Result<Arc<spektra_core::Tables>> {
+    static TABLES: OnceLock<Arc<spektra_core::Tables>> = OnceLock::new();
+    static INIT: Mutex<()> = Mutex::new(());
+    if let Some(t) = TABLES.get() {
+        return Ok(Arc::clone(t));
+    }
+    let _guard = INIT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(t) = TABLES.get() {
+        return Ok(Arc::clone(t));
+    }
+    let t = Arc::new(
+        spektra_core::profile::load_tables(&spektra_core::oracle_dir().display().to_string())
+            .map_err(|e| EngineError::Other(format!("SpektraFilm: {e}")))?,
+    );
+    let _ = TABLES.set(Arc::clone(&t));
+    Ok(t)
+}
+
 /// 加载（或从缓存取）(film, paper, printChain) 对应的管线。
-/// 加载静态表 + 合成 raw LUT 约百毫秒级，按组合缓存避免每次滤镜都重建。
+/// 静态表全局共享后，每组合只构建管线自身（raw LUT 合成约百毫秒级），按组合缓存。
 fn pipeline_for(cfg: &FilmSim) -> Result<Arc<Pipeline>> {
     let key = format!("{}\u{1}{}\u{1}{}", cfg.film, cfg.paper, cfg.print_chain);
     let mut guard = cache().lock().unwrap_or_else(|e| e.into_inner());
     if let Some(p) = guard.get(&key) {
         return Ok(Arc::clone(p));
     }
-    let tables = load_tables(&spektra_core::oracle_dir().display().to_string())
-        .map_err(|e| EngineError::Other(format!("SpektraFilm: {e}")))?;
+    let tables = tables()?;
     let p = if cfg.print_chain {
         let film = load_profile(&cfg.film)
             .map_err(|e| EngineError::Other(format!("SpektraFilm film `{}`: {e}", cfg.film)))?;

@@ -984,3 +984,55 @@ fn a_path_box_snaps_to_a_stationary_selection_edge() {
     crate::canvas::tool_event(&mut app, ToolEvent::Up { x: 143.0, y: 110.0 }, m);
     assert_eq!(app.ui.transform.as_ref().unwrap().quad[0][0], 123.0);
 }
+
+/// View › Snap To › Content: the Crop tool's frame snaps to the image's own edges.
+#[test]
+fn crop_frame_snaps_to_content_edges() {
+    let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+    app.run("file.new", json!({"width": 400, "height": 300, "background": "white"})).unwrap();
+    app.run("select.rect", json!({"x": 150, "y": 100, "width": 100, "height": 100})).unwrap();
+    app.run("edit.fill", json!({"color": "#000000"})).unwrap();
+    app.run("select.deselect", json!({})).unwrap();
+    app.sync_views();
+    app.ppp = 2.0;
+    app.ui.views[0].zoom = 1.0;
+    app.ui.views[0].fit_pending = false;
+    app.ui.tool = Tool::Crop;
+    app.ui.tool_options.crop_shield.classic_mode = true;
+    app.ui.extras.snap = true;
+    // Layer edges off: the block's edges then reach the pointer only via content snapping.
+    app.ui.view.snap_to.layers = false;
+    app.ui.view.snap_to.grid = false;
+    crate::tools::crop_ui::ensure_frame(&mut app);
+    let m = egui::Modifiers::NONE;
+    crate::canvas::tool_event(&mut app, ToolEvent::Down { x: 50.0, y: 50.0, pressure: 1.0 }, m);
+    // Draw the corner 4 px past the block's left edge (x = 150): it snaps onto the edge;
+    // y = 250 is far from any horizontal edge and stays put.
+    crate::canvas::tool_event(&mut app, ToolEvent::Move { x: 154.0, y: 250.0, pressure: 1.0 }, m);
+    let rect = app.ui.crop_rect.expect("a drawn frame");
+    assert!((rect[2] - 149.5).abs() < 1.0, "the corner snapped to the content edge: {rect:?}");
+    assert_eq!(rect[3], 250.0, "{rect:?}");
+    assert!(app.prefs_rt.snap_lines.iter().any(|l| l.vertical && l.kind == SnapKind::Content), "{:?}", app.prefs_rt.snap_lines);
+    crate::canvas::tool_event(&mut app, ToolEvent::Up { x: 154.0, y: 250.0 }, m);
+    // With Content off the same drag keeps the pointer.
+    let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+    app.run("file.new", json!({"width": 400, "height": 300, "background": "white"})).unwrap();
+    app.run("select.rect", json!({"x": 150, "y": 100, "width": 100, "height": 100})).unwrap();
+    app.run("edit.fill", json!({"color": "#000000"})).unwrap();
+    app.run("select.deselect", json!({})).unwrap();
+    app.sync_views();
+    app.ppp = 2.0;
+    app.ui.views[0].zoom = 1.0;
+    app.ui.views[0].fit_pending = false;
+    app.ui.tool = Tool::Crop;
+    app.ui.tool_options.crop_shield.classic_mode = true;
+    app.ui.extras.snap = true;
+    app.ui.view.snap_to.layers = false;
+    app.ui.view.snap_to.grid = false;
+    app.ui.view.snap_to.content = false;
+    crate::tools::crop_ui::ensure_frame(&mut app);
+    crate::canvas::tool_event(&mut app, ToolEvent::Down { x: 50.0, y: 50.0, pressure: 1.0 }, m);
+    crate::canvas::tool_event(&mut app, ToolEvent::Move { x: 154.0, y: 250.0, pressure: 1.0 }, m);
+    let rect = app.ui.crop_rect.expect("a drawn frame");
+    assert_eq!(rect[2], 154.0, "Content off keeps the pointer: {rect:?}");
+}

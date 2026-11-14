@@ -79,11 +79,13 @@ pub struct SnapTo {
     pub layers: bool,
     pub slices: bool,
     pub document_bounds: bool,
+    /// The Crop tool snaps its frame to the image's own content edges (Photoshop's Crop snap).
+    pub content: bool,
 }
 
 impl Default for SnapTo {
     fn default() -> Self {
-        Self { guides: true, grid: true, layers: true, slices: true, document_bounds: true }
+        Self { guides: true, grid: true, layers: true, slices: true, document_bounds: true, content: true }
     }
 }
 

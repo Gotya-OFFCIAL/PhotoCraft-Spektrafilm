@@ -85,6 +85,7 @@ pub(super) fn snap_slot<'a>(s: &'a mut SnapTo, key: &str) -> Option<&'a mut bool
         "layers" => &mut s.layers,
         "slices" => &mut s.slices,
         "documentBounds" => &mut s.document_bounds,
+        "content" => &mut s.content,
         _ => return None,
     })
 }
@@ -107,7 +108,7 @@ const SHOW_KEYS: [&str; 13] = [
 ];
 
 /// Every [`snap_slot`] key.
-const SNAP_KEYS: [&str; 5] = ["guides", "grid", "layers", "slices", "documentBounds"];
+const SNAP_KEYS: [&str; 6] = ["guides", "grid", "layers", "slices", "documentBounds", "content"];
 
 /// The flags of `now` that differ from `def`, by key (`None` when none do).
 fn changed_flags<T: Copy>(now: T, def: T, keys: &[&str], slot: impl for<'a> Fn(&'a mut T, &str) -> Option<&'a mut bool>) -> Option<Value> {

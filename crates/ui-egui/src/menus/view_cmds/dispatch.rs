@@ -340,7 +340,7 @@ fn run(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, p: &Value) -> Res
     if let Some(k) = id.strip_prefix("view.snapTo.") {
         if k == "all" || k == "none" {
             let on = k == "all";
-            o.snap_to = SnapTo { guides: on, grid: on, layers: on, slices: on, document_bounds: on };
+            o.snap_to = SnapTo { guides: on, grid: on, layers: on, slices: on, document_bounds: on, content: on };
             return Ok(json!(on));
         }
         let slot = snap_slot(&mut o.snap_to, k).ok_or("unknown Snap To item")?;

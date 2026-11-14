@@ -53,6 +53,9 @@ pub struct ActiveSnap {
     /// Layer alignments only (smart guides), when View › Snap and Smart Guides are on.
     pub smart: SnapTargets,
     pub disabled: bool,
+    /// Set for a Crop tool point drag: the pointer also snaps to the image's own content edges
+    /// (Photoshop's Crop snap; View › Snap To › Content).
+    pub content_src: Option<photocraft_engine::magnetic_cmds::EdgeSource>,
 }
 
 /// Snap To options from the View menu and the Guides/Grid preferences.
@@ -307,7 +310,13 @@ fn begin(app: &mut PhotocraftApp, p: [f64; 2], mods: egui::Modifiers) {
     // Windows Ctrl both starts a straighten line and is held while it is drawn: the override then
     // covers the press too, or the line's start would snap and its end not.
     let disabled = straightens && override_held(mods);
-    app.prefs_rt.snap = Some(ActiveSnap { gesture, start: p, targets, smart, disabled });
+    // The Crop tool also snaps its frame to the image's content edges (View › Snap To › Content).
+    let content_src = if snap_on(app) && app.ui.view.snap_to.content && app.ui.tool == Tool::Crop && matches!(gesture, Gesture::Point) {
+        photocraft_engine::magnetic_cmds::EdgeSource::new(&app.session)
+    } else {
+        None
+    };
+    app.prefs_rt.snap = Some(ActiveSnap { gesture, start: p, targets, smart, disabled, content_src });
 }
 
 /// Snap a guide drag that ⌘ with a selection tool starts at `p` (`canvas::command_guide_at`,
@@ -315,7 +324,7 @@ fn begin(app: &mut PhotocraftApp, p: [f64; 2], mods: egui::Modifiers) {
 pub fn begin_guide(app: &mut PhotocraftApp, p: [f64; 2]) {
     app.prefs_rt.snap_lines.clear();
     let targets = if snap_on(app) { build(app, &[], false).filtered(|k| k != SnapKind::Guide) } else { SnapTargets::default() };
-    app.prefs_rt.snap = Some(ActiveSnap { gesture: Gesture::Guide, start: p, targets, smart: SnapTargets::default(), disabled: false });
+    app.prefs_rt.snap = Some(ActiveSnap { gesture: Gesture::Guide, start: p, targets, smart: SnapTargets::default(), disabled: false, content_src: None });
 }
 
 /// Snap `p` as a point press does (`Gesture::Point`), for a press that began as a selection move
@@ -364,7 +373,7 @@ fn apply(app: &mut PhotocraftApp, p: [f64; 2], mods: egui::Modifiers) -> [f64; 2
         app.prefs_rt.snap_lines.clear();
         return p;
     }
-    let (out, lines) = match &snap.gesture {
+    let (mut out, mut lines) = match &snap.gesture {
         Gesture::Point => crop_handle(app, p, mods, &snap.targets, tol).unwrap_or_else(|| snap.targets.snap_point(p, tol)),
         Gesture::TransformCorner { point, .. } if corner_distorts(app, &snap.gesture, mods) => {
             let proposed = [point[0] + p[0] - snap.start[0], point[1] + p[1] - snap.start[1]];
@@ -389,6 +398,29 @@ fn apply(app: &mut PhotocraftApp, p: [f64; 2], mods: egui::Modifiers) -> [f64; 2
             snapped(&snap.targets).or_else(|| snapped(&snap.smart)).unwrap_or((p, Vec::new()))
         }
     };
+    // Content-edge snap (Crop): the image's own edges fill an axis the geometry did not hit,
+    // or win when nearer the pointer than what geometry offered there.
+    let bands = if snap.content_src.is_some() { crop_snap_band(app) } else { None };
+    if let Some((yb, xb)) = bands {
+        if let Some(snap) = app.prefs_rt.snap.as_mut() {
+            if let Some(src) = &mut snap.content_src {
+                let geo_x = lines.iter().any(|l| l.vertical);
+                let geo_y = lines.iter().any(|l| !l.vertical);
+                if !geo_x {
+                    if let Some(x) = src.content_edge(true, out[0], yb, tol) {
+                        out[0] = x;
+                        lines.push(SnapLine { vertical: true, pos: x, from: yb.0, to: yb.1, kind: SnapKind::Content });
+                    }
+                }
+                if !geo_y {
+                    if let Some(y) = src.content_edge(false, out[1], xb, tol) {
+                        out[1] = y;
+                        lines.push(SnapLine { vertical: false, pos: y, from: xb.0, to: xb.1, kind: SnapKind::Content });
+                    }
+                }
+            }
+        }
+    }
     app.prefs_rt.snap_lines = lines;
     out
 }
@@ -498,6 +530,14 @@ fn crop_handle(app: &PhotocraftApp, p: [f64; 2], mods: egui::Modifiers, targets:
         lines.retain(|line| (if line.vertical { h[0] } else { h[1] } - line.pos).abs() < 1e-3);
     }
     Some((view.map_or(q, |view| crate::crop_mode::from_press(app, view, q)), lines))
+}
+
+/// The Crop tool's live frame as content-snap bands: (rows for vertical edges, columns for
+/// horizontal ones). Before a frame exists the canvas stands in; `None` without a document.
+fn crop_snap_band(app: &PhotocraftApp) -> Option<((f64, f64), (f64, f64))> {
+    let canvas = app.session.active().map(|d| d.doc.bounds())?;
+    let [x0, y0, x1, y1] = app.ui.crop_rect.unwrap_or([f64::from(canvas.x0), f64::from(canvas.y0), f64::from(canvas.x1), f64::from(canvas.y1)]);
+    Some(((y0, y1), (x0, x1)))
 }
 
 /// Snap the image being moved under the crop box (default mode): the frame moves by the image's

@@ -141,7 +141,6 @@ pub(crate) fn apply_to_surface(
     let pipeline = pipeline_for(&cfg)?;
     let ev_scale = 2f64.powf(cfg.ev);
     let sel_n = selection.map(Surface::channels);
-    let sel_data = selection.map(|s| s.read_region(area));
     let mut out = surf.clone();
     let w = area.width() as usize;
     let band_h = (BAND_PIXELS / w).max(1);
@@ -150,12 +149,8 @@ pub(crate) fn apply_to_surface(
         ctx.check()?;
         let y1 = (y0 + band_h as i32).min(area.y1);
         let band = Rect::new(area.x0, y0, area.x1, y1);
-        // 选区整块读取后的行偏移（选区按自身通道数交错）。
-        let sel_band = sel_data.as_ref().map(|s| {
-            let off = (y0 - area.y0) as usize * sel_n.unwrap_or(n) * w;
-            let len = (y1 - y0) as usize * sel_n.unwrap_or(n) * w;
-            &s[off..][..len]
-        });
+        // 选区按 band 读取（与像素分带同节奏，避免大选区整块驻留内存；按自身通道数交错）。
+        let sel_band = selection.map(|s| s.read_region(band));
         let band_data = surf.read_region(band);
         // sRGB 解码 → 线性，按 2^ev 做曝光补偿。
         let mut linear: Vec<[f64; 3]> = Vec::with_capacity((y1 - y0) as usize * w);
@@ -167,11 +162,19 @@ pub(crate) fn apply_to_surface(
             ]);
         }
         let filtered = pipeline.process(&linear);
+        // 管线输出与输入像素一一对应（编码 sRGB）；不等长说明上游错误，拒绝静默写回。
+        if filtered.len() != linear.len() {
+            return Err(EngineError::Other(format!(
+                "SpektraFilm: pipeline returned {} values for {} pixels",
+                filtered.len(),
+                linear.len()
+            )));
+        }
         // 选区覆盖率（channel 0）做混合：out = orig·(1-k) + filtered·k；alpha/额外通道原样保留。
         let mut result: Vec<f32> = Vec::with_capacity(band_data.len());
         for (px, chunk) in band_data.chunks_exact(n).enumerate() {
-            let k = match (sel_band, sel_n) {
-                (Some(s), Some(m)) => s[px * m].clamp(0.0, 1.0) as f64,
+            let k = match (sel_band.as_deref(), sel_n) {
+                (Some(s), Some(m)) if m > 0 => s[px * m].clamp(0.0, 1.0) as f64,
                 _ => 1.0,
             };
             for c in 0..3 {

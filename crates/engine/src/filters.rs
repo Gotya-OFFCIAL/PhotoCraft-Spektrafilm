@@ -571,13 +571,16 @@ pub fn specs() -> Vec<CommandSpec> {
         },
     ];
     // SpektraFilm 光谱胶片模拟（原生 crate，不参与 wasm 构建）。
+    // film/paper 是 Choice 枚举：对话框渲染为下拉框并预选默认值；列表与
+    // assets/spektra/oracle/profiles/ 的 22 个胶片 + 6 个相纸 stock 一一对应
+    // （profile JSON 增删时同步此清单）。
     #[cfg(not(target_arch = "wasm32"))]
     specs.push(CommandSpec {
         id: crate::spektra_cmds::FILM_SIM,
         label: "Film Simulation…",
         menu: &["Filter", "SpektraFilm"],
         shortcut: None,
-        params: r##"{"film":text,"paper":text,"ev":-4..4=0,"printChain":bool=false}"##,
+        params: r##"{"film":"fujifilm_c200|fujifilm_pro_400h|fujifilm_provia_100f|fujifilm_velvia_100|fujifilm_xtra_400|kodak_2383|kodak_2393|kodak_ektachrome_100|kodak_ektar_100|kodak_gold_200|kodak_kodachrome_64|kodak_portra_160|kodak_portra_400|kodak_portra_800|kodak_portra_800_push1|kodak_portra_800_push2|kodak_ultramax_400|kodak_verita_200d|kodak_vision3_200t|kodak_vision3_250d|kodak_vision3_500t|kodak_vision3_50d"="kodak_portra_400","paper":"fujifilm_crystal_archive_typeii|kodak_endura_premier|kodak_ektacolor_edge|kodak_portra_endura|kodak_supra_endura|kodak_ultra_endura"="kodak_portra_endura","ev":-4..4=0,"printChain":bool=false}"##,
         enabled: has_filterable_layer,
         run: |s, p| run_filter(s, crate::spektra_cmds::FILM_SIM, p),
         journal: true,

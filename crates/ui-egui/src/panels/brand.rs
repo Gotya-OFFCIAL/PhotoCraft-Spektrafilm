@@ -9,9 +9,17 @@ use photocraft_codecs::{ChannelLayout, SampleType};
 /// 128 px: sharp at 20 pt on a 3× display, and the mipmaps keep it clean at 1×.
 const ICON_PNG: &[u8] = include_bytes!("../../../../assets/app-icon/hicolor/128x128/apps/ai.storyteller.photocraft.png");
 
+/// The SpektraFilm mark (`PHOTOCRAFT_BRAND_MARK=spektra`, custom deployments that
+/// install the app under their own product name). Same rounded-corner tile contract.
+const SPEKTRA_PNG: &[u8] = include_bytes!("../../../../assets/app-icon/spektra/mark-128.png");
+
 /// The icon's pixels (one transparent pixel if it couldn't be decoded, which a test rules out).
 fn decode() -> egui::ColorImage {
-    let rgba = photocraft_codecs::decode(ICON_PNG).ok().map(|img| img.convert(ChannelLayout::Rgba, SampleType::U8));
+    let bytes = match std::env::var("PHOTOCRAFT_BRAND_MARK").as_deref() {
+        Ok("spektra") => SPEKTRA_PNG,
+        _ => ICON_PNG,
+    };
+    let rgba = photocraft_codecs::decode(bytes).ok().map(|img| img.convert(ChannelLayout::Rgba, SampleType::U8));
     match rgba {
         Some(img) if img.data().len() == img.width() as usize * img.height() as usize * 4 => {
             egui::ColorImage::from_rgba_unmultiplied([img.width() as usize, img.height() as usize], img.data())

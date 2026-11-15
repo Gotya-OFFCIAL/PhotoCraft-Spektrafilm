@@ -17,7 +17,7 @@
 /// Window, taskbar and (when running unbundled) Dock icon. macOS gets the padded 1024 px render
 /// on Apple's icon grid; elsewhere the 256 px hicolor render of the full tile.
 pub fn window_icon() -> egui::IconData {
-    match eframe::icon_data::from_png_bytes(PNG) {
+    match eframe::icon_data::from_png_bytes(brand_png()) {
         Ok(icon) => icon,
         Err(e) => {
             log::warn!("app icon: {e}");
@@ -56,6 +56,21 @@ fn in_app_bundle(exe: &std::path::Path) -> bool {
 const PNG: &[u8] = include_bytes!("../../../assets/app-icon/photocraft-1024.png");
 #[cfg(not(target_os = "macos"))]
 const PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/ai.storyteller.photocraft.png");
+
+/// The SpektraFilm mark, selected at runtime by `PHOTOCRAFT_BRAND_MARK=spektra`
+/// (deployments that install the app under their own product name, e.g.
+/// PhotoCraft-Spektrafilm). Unused bytes are a few dozen KB.
+#[cfg(target_os = "macos")]
+const SPEKTRA_PNG: &[u8] = include_bytes!("../../../assets/app-icon/spektra/mark-128.png");
+#[cfg(not(target_os = "macos"))]
+const SPEKTRA_PNG: &[u8] = include_bytes!("../../../assets/app-icon/spektra/tile-256.png");
+
+fn brand_png() -> &'static [u8] {
+    match std::env::var("PHOTOCRAFT_BRAND_MARK").as_deref() {
+        Ok("spektra") => SPEKTRA_PNG,
+        _ => PNG,
+    }
+}
 
 #[cfg(test)]
 mod tests {

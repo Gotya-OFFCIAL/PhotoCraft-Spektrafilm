@@ -464,10 +464,11 @@ pub struct Precomputed {
 
 /// 预计算（含成色剂曲线变换，构建一次）。
 ///
-/// `positive` 暂未使用：本 vendored 切片只覆盖负片（negative）预计算路径，调用方
-/// 目前全部传 `false`。正片（slide film，如 Velvia/Provia）会按负片管线处理，
-/// 输出不正确 —— 正片分支待补（见 packaging/spektra/GPL-COMPLIANCE.md 同级的
-/// KNOWN-LIMITATIONS 记录与上游 film.py 的 positive 分叉分析）。
+/// `positive` 暂未使用：本 vendored 切片只实现了负片方向的 DIR 成色剂预计算
+/// （silver = 曲线本身）。上游对正片的 couplers 分支是 silver = nanmax − 曲线
+/// （反射），在 filmSim v1（成色剂关）下不进入；启用正片成色剂时需先补此分支。
+/// 注意：扫描链本身对 positive 无独立分支（见 parity_positive_velvia_scan_film
+/// 机器精度对拍），正片直扫语义完全由 profile 数据承载。
 pub fn precompute(
     profile: &FilmProfile,
     couplers: Option<&crate::couplers::DirCouplers>,

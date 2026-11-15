@@ -41,6 +41,11 @@ fn parse_px(v: &serde_json::Value) -> Vec<[f64; 3]> {
 fn load_golden() -> Golden {
     let raw = std::fs::read_to_string(GOLDEN).expect("golden_vectors.json");
     let v: serde_json::Value = serde_json::from_str(&raw).expect("golden json parse");
+    parse_golden(&v)
+}
+
+/// 解析任意 stock 的黄金向量 JSON（meta.film 记录生成时的胶片）。
+fn parse_golden(v: &serde_json::Value) -> Golden {
     let ramp = &v["ramp"];
     let patches = &v["patches"];
     Golden {
@@ -145,6 +150,30 @@ fn parity_against_upstream_oracle() {
     let pipe2 = build_pipeline_with_oracle_lut();
     run_stage(&golden.ramp, &pipe2, "ramp/L");
     run_stage(&golden.patches, &pipe2, "patch/L");
+}
+
+/// 正片（slide film）直扫对拍：上游 scan 链对 positive 无独立分支（差异只在
+/// couplers/grain/黑白校正，v1 全关），语义由 profile 数据承载。
+/// Velvia 黄金向量由 tools/oracle/golden_vectors.py 以 ORACLE_FILM_STOCK 导出；
+/// 管线走 new()（自行合成 raw LUT），与 filmSim 引擎同路径。
+#[test]
+fn parity_positive_velvia_scan_film() {
+    const GOLDEN_VELVIA: &str =
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_vectors_velvia.json");
+    let raw = std::fs::read_to_string(GOLDEN_VELVIA).expect("golden_vectors_velvia.json");
+    let v: serde_json::Value = serde_json::from_str(&raw).expect("golden json parse");
+    assert_eq!(
+        v["meta"]["film"].as_str().unwrap(),
+        "fujifilm_velvia_100",
+        "黄金向量生成 stock 不匹配"
+    );
+    let golden = parse_golden(&v);
+    println!("== 正片（Velvia 100）直扫黄金对拍（自行合成 raw LUT） ==");
+    let prof = load_profile("fujifilm_velvia_100").expect("velvia profile");
+    let tables = load_tables(&oracle_dir().display().to_string()).expect("tables");
+    let pipe = NegativeScanPipeline::new(prof, tables);
+    run_stage(&golden.ramp, &pipe, "ramp  ");
+    run_stage(&golden.patches, &pipe, "patch ");
 }
 
 #[test]

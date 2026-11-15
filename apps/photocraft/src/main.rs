@@ -148,13 +148,12 @@ fn control_port_for(cli: Option<u16>, prefs: &photocraft_engine::prefs::Integrat
 /// (`main` turns `centered` off, #4826). Wayland compositors place windows themselves.
 fn native_options(custom_titlebar: bool) -> eframe::NativeOptions {
     let viewport = egui::ViewportBuilder::default().with_icon(app_icon::viewport_icon(std::env::current_exe().ok().as_deref()));
-    // `PHOTOCRAFT_APP_TITLE` lets a deployment rebrand the window (e.g. a custom
-    // build installed under its own product name) without forking the binary.
-    let app_title = std::env::var("PHOTOCRAFT_APP_TITLE").unwrap_or_else(|_| "PhotoCraft".to_string());
+    // The brand follows `PHOTOCRAFT_APP_TITLE` (unset = "PhotoCraft"); the runtime title
+    // sync (`panels::sync_window_title`) re-applies the same brand every frame.
     eframe::NativeOptions {
         viewport: viewport
             .with_app_id(APP_ID)
-            .with_title(app_title)
+            .with_title(photocraft_ui_egui::panels::app_name().to_string())
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size(photocraft_ui_egui::MIN_WINDOW_SIZE)
             .with_drag_and_drop(true)

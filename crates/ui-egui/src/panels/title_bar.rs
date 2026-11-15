@@ -48,8 +48,8 @@ pub fn title_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             let title = app
                 .session
                 .active()
-                .map(|d| format!("{}{}", if show_name { d.doc.name.as_str() } else { "PhotoCraft" }, if d.is_dirty() { "  •" } else { "" }))
-                .unwrap_or_else(|| "PhotoCraft".into());
+                .map(|d| format!("{}{}", if show_name { d.doc.name.as_str() } else { app_name() }, if d.is_dirty() { "  •" } else { "" }))
+                .unwrap_or_else(|| app_name().to_string());
             // The menus and the far-end controls are laid out first; the title is centred in
             // whatever room is left between them (`free`, left to right: menus then controls, or
             // controls then menus in a right-to-left UI), shortened or dropped rather than drawn
@@ -168,11 +168,20 @@ pub fn system_title_bar(app: &PhotocraftApp) -> bool {
 /// marks unsaved changes, like the `•` in the app-drawn title), or just the app name with no
 /// document open. With Preferences › Interface › Show File Name In Title off, the file name
 /// drops out and only the app name (and the `*`) remains (#5037).
+/// The brand used in the title strip and the OS window title: `PHOTOCRAFT_APP_TITLE`
+/// overrides the default "PhotoCraft" (custom deployments that install the app under
+/// their own product name set it; the value is read once per process).
+pub fn app_name() -> &'static str {
+    static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    NAME.get_or_init(|| std::env::var("PHOTOCRAFT_APP_TITLE").unwrap_or_else(|_| "PhotoCraft".into()))
+}
+
 pub fn window_title(app: &PhotocraftApp) -> String {
+    let brand = app_name();
     if !app.session.prefs().interface.show_file_name_in_title {
-        return format!("{}PhotoCraft", if app.session.active().is_some_and(|d| d.is_dirty()) { "*" } else { "" });
+        return format!("{}{brand}", if app.session.active().is_some_and(|d| d.is_dirty()) { "*" } else { "" });
     }
-    app.session.active().map(|d| format!("{}{} \u{2014} PhotoCraft", if d.is_dirty() { "*" } else { "" }, d.doc.name)).unwrap_or_else(|| "PhotoCraft".into())
+    app.session.active().map(|d| format!("{}{} \u{2014} {brand}", if d.is_dirty() { "*" } else { "" }, d.doc.name)).unwrap_or_else(|| brand.to_string())
 }
 
 /// Keep the OS window title (and the taskbar / Alt-Tab entry) on the active file. Sends

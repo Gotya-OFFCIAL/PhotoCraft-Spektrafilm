@@ -365,6 +365,14 @@ fn rememberable(kind: &Kind, value: &Value) -> bool {
     }
 }
 
+/// SpektraFilm's `printChain` is a pipeline-mode switch, not a look preference: it must always
+/// start from the schema default (`true` = paper print chain = the film look). A remembered
+/// `false` (negative scan) would reopen the dialog on the orange mask and make the fixed
+/// default look broken, so it is excluded from remembered dialog params.
+fn rememberable_for_command(command: &str, key: &str) -> bool {
+    !(command == "filter.spektra.filmSim" && key == "printChain")
+}
+
 fn restore_remembered(app: &PhotocraftApp, command: &str, spec: &str, fields: &mut Map<String, Value>) {
     let Some(Value::Object(saved)) = app.session.prefs().dialogs.get(command) else { return };
     // Select and Mask starts from its defaults unless Remember Settings was on, as in Photoshop
@@ -377,7 +385,9 @@ fn restore_remembered(app: &PhotocraftApp, command: &str, spec: &str, fields: &m
         }
     }
     for p in parse_spec(spec) {
-        if let Some(v) = saved.get(&p.key).filter(|v| rememberable(&p.kind, v)) {
+        if rememberable_for_command(command, &p.key)
+            && let Some(v) = saved.get(&p.key).filter(|v| rememberable(&p.kind, v))
+        {
             fields.insert(p.key, v.clone());
         }
     }
@@ -389,8 +399,11 @@ pub(crate) fn remember(app: &mut PhotocraftApp, command: &str, fields: &Map<Stri
         return;
     }
     let Some(spec) = photocraft_engine::commands::find(command) else { return };
-    let mut saved: Map<String, Value> =
-        parse_spec(spec.params).into_iter().filter_map(|p| fields.get(&p.key).filter(|v| rememberable(&p.kind, v)).map(|v| (p.key, v.clone()))).collect();
+    let mut saved: Map<String, Value> = parse_spec(spec.params)
+        .into_iter()
+        .filter(|p| rememberable_for_command(command, &p.key))
+        .filter_map(|p| fields.get(&p.key).filter(|v| rememberable(&p.kind, v)).map(|v| (p.key, v.clone())))
+        .collect();
     // Select and Mask with Remember Settings off keeps only that choice, so the next one starts
     // from the defaults (#9423).
     if command == crate::select_mask_view::COMMAND {

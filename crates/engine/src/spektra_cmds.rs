@@ -11,7 +11,10 @@
 //! - `film`：胶片 stock 名（assets profiles 目录，如 `kodak_portra_400`）
 //! - `paper`：相纸 stock 名（仅 `printChain` 开启时使用）
 //! - `ev`：曝光补偿，-4..4，0 = 不补偿（线性输入按 2^ev 缩放）
-//! - `printChain`：是否走完整 print 链（负片→相纸→扫描），否则仅负片直扫
+//! - `printChain`：**默认 true** —— 相纸打印链（负片→放大机→相纸→扫描），即上游
+//!   `io.scan_film=false` 的默认语义，产出的才是「胶片观感」；`false` = 负片直扫，
+//!   输出负片橙罩原始扫描（上游 demo 里标注 "negative" 的对照图），仅供研究。
+//!   （2026-11-15 修正：原默认 false 使滤镜默认输出橙罩，被误认为渲染 bug。）
 //!
 //! v1 语义与 spektra-core M1/M2 对拍一致：颗粒/DIR 成色剂/色域压缩保持管线默认（关），
 //! 保证输出可复现并与黄金向量一致。
@@ -58,7 +61,10 @@ fn parse_film_sim(p: &Value) -> Result<FilmSim> {
         .and_then(Value::as_f64)
         .unwrap_or(0.0)
         .clamp(-4.0, 4.0);
-    let print_chain = p.get("printChain").and_then(Value::as_bool).unwrap_or(false);
+    // printChain 默认 true：相纸打印链才是「胶片观感」（上游 io.scan_film 默认 False 同理）。
+    // false 是负片直扫——输出的是负片橙罩原始扫描（上游 demo 里标注 "negative" 的那张），
+    // 只作研究用途，不是可用的滤镜观感。
+    let print_chain = p.get("printChain").and_then(Value::as_bool).unwrap_or(true);
     Ok(FilmSim {
         film: string_param("film", DEFAULT_FILM),
         paper: string_param("paper", DEFAULT_PAPER),

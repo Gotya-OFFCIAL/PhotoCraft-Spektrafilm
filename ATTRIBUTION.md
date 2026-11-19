@@ -154,3 +154,11 @@ longer used or shipped.
 | `hayro-interpret 0.7.0 / assets/Foxit*.pfb` (13 standard-14 font files) | Foxit Software Inc. / PDFium Authors | <https://github.com/storytold/craft-libs/tree/c5a1cbfb5f9049f9270955caffb5bee5997aebf7/vendor/hayro-interpret/assets> | BSD-3-Clause | Renders non-embedded standard-14 PDF fonts |
 | `hayro-interpret 0.7.0 / assets/CGATS001Compat-v2-micro.icc` | Clinton Ingram (saucecontrol/Compact-ICC-Profiles) | <https://github.com/storytold/craft-libs/tree/c5a1cbfb5f9049f9270955caffb5bee5997aebf7/vendor/hayro-interpret/assets> | CC0-1.0 | Default CMYK colour conversion |
 | `hayro-cmap 0.1.0 / assets/cmaps.brotli` | Adobe | <https://github.com/storytold/craft-libs/tree/c5a1cbfb5f9049f9270955caffb5bee5997aebf7/vendor/hayro-cmap/assets> | BSD-3-Clause | Character-code mapping for CJK PDFs |
+
+## SpektraFilm & SpektraLab
+
+| Path | Title | Author | Source | License |
+|---|---|---|---|---|
+| `crates/spektra-core/` | SpektraFilm 81-wavelength spectral film simulation engine (`spektrafilm-rust`) | Andrea Volpato (upstream Python `spektrafilm`); turbasvin (`spektrafilm-rust` Rust port) | <https://github.com/turbasvin/spektrafilm-rust>, <https://github.com/andreavolpato/spektrafilm> | GPL-3.0-or-later |
+| `assets/spektra/oracle/` | Measured film/paper spectral profiles, oracle tables & enlarger neutral print filters | Andrea Volpato and upstream `spektrafilm` contributors | <https://github.com/andreavolpato/spektrafilm> | CC BY-SA 4.0 |
+| `assets/spektra/covers/*.jpg` (11 files) & `crates/ui-egui/src/dialogs/spektra_ui.rs` (UI layout & colour palette reference) | SpektraLab Darkroom Studio 3-column UI design & film canister/box cover thumbnails | Hanze Qiu (`JamesQiu2005`) | <https://github.com/JamesQiu2005/SpektraLab> (`modern_UI/Spektrafilm/Spektrafilm/Resources/FilmCovers/`, `desktop/src/`) | GPL-3.0-or-later |

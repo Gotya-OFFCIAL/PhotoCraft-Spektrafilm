@@ -194,6 +194,8 @@ fn resizable_dialog(fields: &serde_json::Map<String, Value>) -> Option<egui::Vec
         Some(crate::prefs_ui::PREFERENCES_SIZE)
     } else if fields.contains_key("__web") {
         Some(egui::vec2(960.0, 900.0))
+    } else if crate::spektra_ui::owns(fields) {
+        Some(crate::spektra_ui::DEFAULT_SIZE)
     } else if is_curves(fields) {
         Some(CURVES_SIZE)
     } else {
@@ -212,7 +214,13 @@ const CURVES_SIZE: egui::Vec2 = egui::vec2(300.0, 420.0);
 /// The smallest a resizable dialog is dragged to: Curves keeps a usable graph (#8984), the others
 /// their two-column layouts.
 fn resizable_min(fields: &serde_json::Map<String, Value>) -> egui::Vec2 {
-    if is_curves(fields) { egui::vec2(300.0, 420.0) } else { egui::vec2(560.0, 400.0) }
+    if is_curves(fields) {
+        egui::vec2(300.0, 420.0)
+    } else if crate::spektra_ui::owns(fields) {
+        crate::spektra_ui::MIN_SIZE
+    } else {
+        egui::vec2(560.0, 400.0)
+    }
 }
 
 /// Where the size the user last gave a resizable dialog is kept (#8984), beside its place.
@@ -429,6 +437,10 @@ fn dialog_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, d: &Dialog, fields: &
 
 /// A filter-style dialog: scrolling parameters with the in-dialog preview window under them.
 fn filter_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, d: &Dialog, fields: &mut Fields, id: egui::Id) {
+    if crate::spektra_ui::owns(fields) {
+        crate::spektra_ui::body(app, d.id, ui, fields);
+        return;
+    }
     crate::filter_dialog::refresh_match_color_sources(&app.session, fields);
     // Color Settings: the monitor profile in use can change while it is open.
     if fields.get("__command").and_then(Value::as_str) == Some("edit.colorSettings") {
@@ -689,7 +701,7 @@ pub fn show(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 ui.set_min_width(700.0);
             }
             ui.set_max_width(wide.unwrap_or_else(|| default_max_width(&d, compact, curves, about_tabs, available.x)));
-            if web || fixed.is_some() {
+            if web || fixed.is_some() || crate::spektra_ui::owns(&fields) {
                 ui.set_max_width(available.x);
                 ui.set_min_size(available);
             } else if let Some(w) = crate::file_ui::dialog_width(&d.fields) {
@@ -1348,6 +1360,7 @@ pub(super) mod sizing;
 pub mod smart_filter_dialog;
 pub mod snapshot_dialog;
 pub(crate) mod solid_fill_ui;
+pub mod spektra_ui;
 pub mod stack_dialog;
 pub mod stroke_ui;
 pub mod targa_options_ui;

@@ -47,6 +47,19 @@ struct FilmSim {
     paper: String,
     ev: f64,
     print_chain: bool,
+    couplers: bool,
+    couplers_amount: f64,
+    input_gamut: bool,
+    output_gamut: bool,
+    print_ev: f64,
+    cc_cyan: f64,
+    cc_magenta: f64,
+    cc_yellow: f64,
+}
+
+/// 查询 (相纸, 胶片) 在 TH-KG3 放大机光源下的数据库中性配光 CC 值 `[C, M, Y]`。
+pub fn neutral_cc_for(paper: &str, film: &str) -> [f64; 3] {
+    spektra_core::printing::resolve_print_filters(paper, "TH-KG3", film)
 }
 
 fn parse_film_sim(p: &Value) -> Result<FilmSim> {
@@ -56,20 +69,39 @@ fn parse_film_sim(p: &Value) -> Result<FilmSim> {
             _ => default.to_string(),
         }
     };
-    let ev = p
-        .get("ev")
-        .and_then(Value::as_f64)
-        .unwrap_or(0.0)
-        .clamp(-4.0, 4.0);
+    let f64_param = |key: &str, default: f64, min: f64, max: f64| -> f64 {
+        p.get(key)
+            .and_then(Value::as_f64)
+            .filter(|v| v.is_finite())
+            .unwrap_or(default)
+            .clamp(min, max)
+    };
+    let ev = f64_param("ev", 0.0, -4.0, 4.0);
     // printChain 默认 true：相纸打印链才是「胶片观感」（上游 io.scan_film 默认 False 同理）。
     // false 是负片直扫——输出的是负片橙罩原始扫描（上游 demo 里标注 "negative" 的那张），
     // 只作研究用途，不是可用的滤镜观感。
     let print_chain = p.get("printChain").and_then(Value::as_bool).unwrap_or(true);
+    let couplers = p.get("couplers").and_then(Value::as_bool).unwrap_or(false);
+    let couplers_amount = f64_param("couplersAmount", 1.0, 0.0, 2.0);
+    let input_gamut = p.get("inputGamut").and_then(Value::as_bool).unwrap_or(false);
+    let output_gamut = p.get("outputGamut").and_then(Value::as_bool).unwrap_or(false);
+    let print_ev = f64_param("printEv", 0.0, -2.0, 2.0);
+    let cc_cyan = f64_param("ccCyan", 0.0, -50.0, 50.0);
+    let cc_magenta = f64_param("ccMagenta", 0.0, -50.0, 50.0);
+    let cc_yellow = f64_param("ccYellow", 0.0, -50.0, 50.0);
     Ok(FilmSim {
         film: string_param("film", DEFAULT_FILM),
         paper: string_param("paper", DEFAULT_PAPER),
         ev,
         print_chain,
+        couplers,
+        couplers_amount,
+        input_gamut,
+        output_gamut,
+        print_ev,
+        cc_cyan,
+        cc_magenta,
+        cc_yellow,
     })
 }
 
@@ -113,26 +145,90 @@ fn tables() -> Result<Arc<spektra_core::Tables>> {
     Ok(t)
 }
 
-/// 加载（或从缓存取）(film, paper, printChain) 对应的管线。
-/// 静态表全局共享后，每组合只构建管线自身（raw LUT 合成约百毫秒级），按组合缓存。
+/// CAM16-UCS 输出色域压缩器全局单例（C_max 64×720 二分表构建一次后跨管线共享）。
+fn shared_output_gamut() -> Result<Arc<spektra_core::gamut::OutputGamutCompressor>> {
+    static OUT_GAMUT: OnceLock<Arc<spektra_core::gamut::OutputGamutCompressor>> = OnceLock::new();
+    if let Some(g) = OUT_GAMUT.get() {
+        return Ok(Arc::clone(g));
+    }
+    let t = tables()?;
+    let g = Arc::new(spektra_core::gamut::OutputGamutCompressor::new_srgb(&t));
+    let _ = OUT_GAMUT.set(Arc::clone(&g));
+    Ok(g)
+}
+
+/// 加载（或从缓存取）配置对应的管线。
+/// 静态表全局共享后，每组合只构建管线自身（raw LUT 合成约百毫秒级），按参数指纹缓存。
 fn pipeline_for(cfg: &FilmSim) -> Result<Arc<Pipeline>> {
-    let key = format!("{}\u{1}{}\u{1}{}", cfg.film, cfg.paper, cfg.print_chain);
+    let q = |v: f64| (v * 100.0).round() as i64;
+    let key = format!(
+        "{}\u{1}{}\u{1}{}\u{1}{}:{}\u{1}{}:{}\u{1}{}:{}:{}:{}",
+        cfg.film,
+        cfg.paper,
+        cfg.print_chain,
+        cfg.couplers,
+        q(cfg.couplers_amount),
+        cfg.input_gamut,
+        cfg.output_gamut,
+        q(cfg.print_ev),
+        q(cfg.cc_cyan),
+        q(cfg.cc_magenta),
+        q(cfg.cc_yellow)
+    );
     let mut guard = cache().lock().unwrap_or_else(|e| e.into_inner());
     if let Some(p) = guard.get(&key) {
         return Ok(Arc::clone(p));
     }
     let tables = tables()?;
-    let p = if cfg.print_chain {
-        let film = load_profile(&cfg.film)
-            .map_err(|e| EngineError::Other(format!("SpektraFilm film `{}`: {e}", cfg.film)))?;
+    let out_gamut = if cfg.output_gamut {
+        Some(shared_output_gamut()?)
+    } else {
+        None
+    };
+    let make_couplers = |film: &spektra_core::FilmProfile| -> Option<spektra_core::couplers::DirCouplers> {
+        if !cfg.couplers || cfg.couplers_amount <= 0.0 || film.info.film_type == "positive" {
+            // spektra-core precompute() 当前仅实现负片方向（silver = 曲线本身），正片反射分支尚未移植。
+            return None;
+        }
+        let mut c = spektra_core::couplers::DirCouplers::negative();
+        c.amount = cfg.couplers_amount;
+        Some(c)
+    };
+    let film = load_profile(&cfg.film)
+        .map_err(|e| EngineError::Other(format!("SpektraFilm film `{}`: {e}", cfg.film)))?;
+    let couplers = make_couplers(&film);
+    // 彩色反转正片（Velvia / Provia / Ektachrome / Kodachrome）显影后已是正像，
+    // 送入负片相纸 PrintPipeline 会被二次反相；按 SpektraLab 规则自动跳过相纸改走透射正片直扫。
+    let use_print = cfg.print_chain && film.info.film_type != "positive";
+    let p = if use_print {
         let paper = load_profile(&cfg.paper)
             .map_err(|e| EngineError::Other(format!("SpektraFilm paper `{}`: {e}", cfg.paper)))?;
-        Arc::new(Pipeline::Print(Arc::new(PrintPipeline::new(film, paper, tables))))
+        let mut pipe = PrintPipeline::new(film, paper, tables);
+        if cfg.input_gamut {
+            pipe = pipe.with_input_gamut((0.0, 1.0, 6.0));
+        }
+        if cfg.cc_cyan != 0.0 || cfg.cc_magenta != 0.0 || cfg.cc_yellow != 0.0 || cfg.print_ev != 0.0 {
+            pipe = pipe.with_enlarger([cfg.cc_cyan, cfg.cc_magenta, cfg.cc_yellow], cfg.print_ev);
+        }
+        if couplers.is_some() {
+            pipe.set_couplers(couplers);
+        }
+        pipe.output_gamut = out_gamut;
+        Arc::new(Pipeline::Print(Arc::new(pipe)))
     } else {
-        let film = load_profile(&cfg.film)
-            .map_err(|e| EngineError::Other(format!("SpektraFilm film `{}`: {e}", cfg.film)))?;
-        Arc::new(Pipeline::Scan(Arc::new(NegativeScanPipeline::new(film, tables))))
+        let mut pipe = NegativeScanPipeline::new(film, tables);
+        if cfg.input_gamut {
+            pipe = pipe.with_input_gamut((0.0, 1.0, 6.0));
+        }
+        if couplers.is_some() {
+            pipe.set_couplers(couplers);
+        }
+        pipe.output_gamut = out_gamut;
+        Arc::new(Pipeline::Scan(Arc::new(pipe)))
     };
+    if guard.len() >= 32 {
+        guard.clear();
+    }
     guard.insert(key, Arc::clone(&p));
     Ok(p)
 }

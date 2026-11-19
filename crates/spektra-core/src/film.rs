@@ -280,7 +280,7 @@ mod tests {
     use crate::profile::{load_profile, load_tables};
     use crate::oracle_dir;
 
-    const GOLDEN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_vectors.json");
+    const GOLDEN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_vectors.json");
 
     fn parse_px(v: &serde_json::Value) -> Vec<[f64; 3]> {
         v.as_array()
@@ -391,7 +391,7 @@ mod debug_scan {
     fn debug_intermediates() {
         let p = load_profile("kodak_portra_400").unwrap();
         let t = load_tables(&oracle_dir().display().to_string()).unwrap();
-        let golden = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_vectors.json")).unwrap();
+        let golden = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_vectors.json")).unwrap();
         let g: serde_json::Value = serde_json::from_str(&golden).unwrap();
         let names: Vec<String> = g["patches"]["names"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().into()).collect();
         let parse = |i: usize| -> [f64; 3] {

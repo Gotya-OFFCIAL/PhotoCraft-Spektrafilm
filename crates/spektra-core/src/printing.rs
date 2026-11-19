@@ -65,7 +65,8 @@ pub const NEUTRAL_FILTERS_JSON: &str =
 /// 解析放大机中性滤色（digest_params → apply_database_neutral_print_filters 语义）：
 /// 按 (相纸, 光源, 胶片) 三元组查 neutral_print_filters.json，查到则替换默认值，否则用 DEFAULT_CC。
 pub fn resolve_print_filters(paper_stock: &str, illuminant: &str, film_stock: &str) -> [f64; 3] {
-    let text = match std::fs::read_to_string(NEUTRAL_FILTERS_JSON) {
+    let bundled = crate::assets::oracle_dir().join("filters").join("neutral_print_filters.json");
+    let text = match std::fs::read_to_string(&bundled).or_else(|_| std::fs::read_to_string(NEUTRAL_FILTERS_JSON)) {
         Ok(t) => t,
         Err(_) => return DEFAULT_CC,
     };
@@ -386,7 +387,7 @@ mod debug_print {
         let paper = crate::profile::load_profile("kodak_portra_endura").unwrap();
         let t = crate::profile::load_tables(&crate::oracle_dir().display().to_string()).unwrap();
         // debug bin: [print_illu(81), ds_mid(81)]
-        let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/debug_print_intermediates_f64.bin")).unwrap();
+        let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/debug_print_intermediates_f64.bin")).unwrap();
         let vals: Vec<f64> = bytes.chunks_exact(8).map(|c| f64::from_le_bytes(c.try_into().unwrap())).collect();
         let (illu_oracle, dsmid_oracle) = (&vals[0..81], &vals[81..162]);
 

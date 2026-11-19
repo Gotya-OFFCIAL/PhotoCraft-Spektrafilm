@@ -97,12 +97,20 @@ fn fields(id: &str) -> Option<&'static [(&'static str, Rule)]> {
             ("vertical", Number(f64::MIN, f64::MAX)),
             ("undefinedAreas", Choice("wrap|repeat|transparent")),
         ],
-        // SpektraFilm 光谱胶片模拟（原生 crate；stock 名经资产目录解析，对话框为文本输入）。
+        // SpektraFilm 光谱胶片模拟（原生 crate；stock 名经资产目录解析，支持暗房扩展参数）。
         "filter.spektra.filmSim" => &[
             ("film", Str),
             ("paper", Str),
             ("ev", Number(-4.0, 4.0)),
             ("printChain", Bool),
+            ("couplers", Bool),
+            ("couplersAmount", Number(0.0, 2.0)),
+            ("inputGamut", Bool),
+            ("outputGamut", Bool),
+            ("printEv", Number(-2.0, 2.0)),
+            ("ccCyan", Number(-50.0, 50.0)),
+            ("ccMagenta", Number(-50.0, 50.0)),
+            ("ccYellow", Number(-50.0, 50.0)),
         ],
         "filter.blur.average"
         | "filter.blur.blur"

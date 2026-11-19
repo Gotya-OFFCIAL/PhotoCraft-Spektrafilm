@@ -580,7 +580,7 @@ pub fn specs() -> Vec<CommandSpec> {
         label: "Film Simulation…",
         menu: &["Filter", "SpektraFilm"],
         shortcut: None,
-        params: r##"{"film":"fujifilm_c200|fujifilm_pro_400h|fujifilm_provia_100f|fujifilm_velvia_100|fujifilm_xtra_400|kodak_2383|kodak_2393|kodak_ektachrome_100|kodak_ektar_100|kodak_gold_200|kodak_kodachrome_64|kodak_portra_160|kodak_portra_400|kodak_portra_800|kodak_portra_800_push1|kodak_portra_800_push2|kodak_ultramax_400|kodak_verita_200d|kodak_vision3_200t|kodak_vision3_250d|kodak_vision3_500t|kodak_vision3_50d"="kodak_portra_400","paper":"fujifilm_crystal_archive_typeii|kodak_endura_premier|kodak_ektacolor_edge|kodak_portra_endura|kodak_supra_endura|kodak_ultra_endura"="kodak_portra_endura","ev":-4..4=0,"printChain":bool=true}"##,
+        params: r##"{"film":"fujifilm_c200|fujifilm_pro_400h|fujifilm_provia_100f|fujifilm_velvia_100|fujifilm_xtra_400|kodak_2383|kodak_2393|kodak_ektachrome_100|kodak_ektar_100|kodak_gold_200|kodak_kodachrome_64|kodak_portra_160|kodak_portra_400|kodak_portra_800|kodak_portra_800_push1|kodak_portra_800_push2|kodak_ultramax_400|kodak_verita_200d|kodak_vision3_200t|kodak_vision3_250d|kodak_vision3_500t|kodak_vision3_50d"="kodak_portra_400","paper":"fujifilm_crystal_archive_typeii|kodak_endura_premier|kodak_ektacolor_edge|kodak_portra_endura|kodak_supra_endura|kodak_ultra_endura"="kodak_portra_endura","ev":-4..4=0,"printChain":bool=true,"couplers":bool=false,"couplersAmount":0..2=1,"inputGamut":bool=false,"outputGamut":bool=false,"printEv":-2..2=0,"ccCyan":-50..50=0,"ccMagenta":-50..50=0,"ccYellow":-50..50=0}"##,
         enabled: has_filterable_layer,
         run: |s, p| run_filter(s, crate::spektra_cmds::FILM_SIM, p),
         journal: true,

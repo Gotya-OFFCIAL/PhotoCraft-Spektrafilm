@@ -121,6 +121,29 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                             icons::paint(ui, r, "chevron-down", 10.0, t.text_faint);
                         }
                         widgets::vline(ui, 22.0);
+                        if crate::brand::is_spektra() && app.session.active().is_some() {
+                            let pill_label = "✦ SpektraFilm 胶片暗房";
+                            let galley = ui.painter().layout_no_wrap(pill_label.into(), crate::theme::semibold(11.5), Color32::WHITE);
+                            let (p_rect, p_resp) = ui.allocate_exact_size(vec2(galley.size().x + 18.0, 22.0), Sense::click());
+                            let p_resp = p_resp
+                                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                .on_hover_text("打开 SpektraFilm 81 波长光谱胶片与暗房印相工作台 (Filter › SpektraFilm › Film Simulation…)");
+                            let amber = Color32::from_rgb(225, 169, 95);
+                            let bg = if p_resp.hovered() {
+                                Color32::from_rgba_unmultiplied(225, 169, 95, 42)
+                            } else {
+                                Color32::from_rgba_unmultiplied(225, 169, 95, 22)
+                            };
+                            ui.painter().rect_filled(p_rect, egui::CornerRadius::same(99), bg);
+                            ui.painter().rect_stroke(p_rect, egui::CornerRadius::same(99), egui::Stroke::new(1.0, amber), egui::StrokeKind::Inside);
+                            ui.painter().text(p_rect.center(), egui::Align2::CENTER_CENTER, pill_label, crate::theme::semibold(11.5), amber);
+                            if p_resp.clicked()
+                                && let Err(e) = crate::menus::invoke(app, ui.ctx(), "filter.spektra.filmSim", json!({}))
+                            {
+                                app.ui.status = e;
+                            }
+                            widgets::vline(ui, 22.0);
+                        }
                         if app.ui.transform.is_some() {
                             crate::transform_tool::options_bar(app, ui);
                             return;

@@ -227,6 +227,35 @@ fn properties_body_inner(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
 /// Photoshop's Adjustments panel: a grid of one-click adjustment layers.
 pub(super) fn adjustments_grid(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
+    if crate::brand::is_spektra() {
+        let amber = egui::Color32::from_rgb(225, 169, 95);
+        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
+        let resp = resp
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text("打开 SpektraFilm 81 波长光谱胶片与暗房印相工作台");
+        let bg = if resp.hovered() {
+            egui::Color32::from_rgba_unmultiplied(225, 169, 95, 42)
+        } else {
+            egui::Color32::from_rgba_unmultiplied(225, 169, 95, 22)
+        };
+        ui.painter().rect_filled(rect, CornerRadius::same(6), bg);
+        ui.painter().rect_stroke(rect, CornerRadius::same(6), Stroke::new(1.0, amber), egui::StrokeKind::Inside);
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "✦ SpektraFilm 光谱胶片暗房",
+            theme::semibold(12.0),
+            amber,
+        );
+        if resp.clicked()
+            && let Err(e) = crate::menus::invoke(app, ui.ctx(), "filter.spektra.filmSim", json!({}))
+        {
+            app.ui.status = e;
+        }
+        ui.add_space(8.0);
+        widgets::hairline(ui);
+        ui.add_space(8.0);
+    }
     ui.label(RichText::new(tl!("Add an adjustment")).color(t.text_dim));
     ui.add_space(4.0);
     let items: [(&str, &str, &str); 16] = [

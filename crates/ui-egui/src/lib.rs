@@ -185,6 +185,7 @@ use dialogs::sizing;
 pub use dialogs::smart_filter_dialog;
 pub use dialogs::snapshot_dialog;
 pub(crate) use dialogs::solid_fill_ui;
+pub use dialogs::spektra_ui;
 pub use dialogs::stack_dialog;
 pub use dialogs::stroke_ui;
 pub use dialogs::targa_options_ui;

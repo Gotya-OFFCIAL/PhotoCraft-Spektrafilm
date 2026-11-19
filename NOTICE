@@ -24,6 +24,20 @@ https://github.com/storytold/craft-fonts/blob/main/ATTRIBUTION.md (today BIZ UDP
 BIZ UDMincho; not the web build), under the SIL Open Font License 1.1. Their licence texts
 ship with the package as OFL-<family>.txt.
 
+SpektraFilm spectral film simulation (route D source-level integration)
+-------------------------------------------
+crates/spektra-core/ is vendored from the spektrafilm-rust port of spektrafilm and is
+GPL-3.0-or-later, Copyright (C) Andrea Volpato (upstream spektrafilm) and turbasvin
+(spektrafilm-rust); source: https://github.com/turbasvin/spektrafilm-rust and
+https://github.com/andreavolpato/spektrafilm. Film/paper profile data is CC BY-SA 4.0.
+
+The Darkroom Studio 3-column UI layout reference and film box covers (assets/spektra/covers/*.jpg)
+are adapted from SpektraLab (https://github.com/JamesQiu2005/SpektraLab), Copyright (C) Hanze Qiu,
+licensed under GPL-3.0-or-later.
+
+This combined build is therefore distributed under GPL-3.0-or-later; see
+packaging/spektra/GPL-COMPLIANCE.md and packaging/spektra/KNOWN-LIMITATIONS.md.
+
 Linux and FreeBSD Wayland window decorations
 -------------------------------------------
 sctk-adwaita 0.10.1 (https://github.com/PolyMeilex/sctk-adwaita,

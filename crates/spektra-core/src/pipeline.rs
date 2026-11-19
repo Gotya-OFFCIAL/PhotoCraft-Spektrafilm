@@ -225,7 +225,7 @@ impl PrintPipeline {
         let print_curves = crate::printing::evaluate_fitted_density(
             &paper.data.density_curves_model, &paper.data.log_exposure,
         );
-        let expose_pre = std::sync::Arc::new(crate::printing::precompute_print_expose(&film, &tables, cc));
+        let expose_pre = std::sync::Arc::new(crate::printing::precompute_print_expose(&paper, &tables, cc));
         Self {
             film,
             paper,
@@ -261,6 +261,26 @@ impl PrintPipeline {
         self
     }
 
+    /// 设置放大机二向色滤色头偏移（C, M, Y 偏移量）与印相曝光补偿（EV 档位）。
+    pub fn with_enlarger(mut self, cc_shift: [f64; 3], print_ev: f64) -> Self {
+        if cc_shift != [0.0; 3] {
+            self.cc = [
+                (self.cc[0] + cc_shift[0]).clamp(0.0, 200.0),
+                (self.cc[1] + cc_shift[1]).clamp(0.0, 200.0),
+                (self.cc[2] + cc_shift[2]).clamp(0.0, 200.0),
+            ];
+            self.expose_pre = std::sync::Arc::new(crate::printing::precompute_print_expose(
+                &self.paper,
+                &self.tables,
+                self.cc,
+            ));
+        }
+        if print_ev != 0.0 {
+            self.factor_midgray *= 2f64.powf(print_ev);
+        }
+        self
+    }
+
     /// 设置成色剂并同步重建预计算。
     pub fn set_couplers(&mut self, c: Option<crate::couplers::DirCouplers>) {
         self.pre = std::sync::Arc::new(film::precompute(&self.film, c.as_ref(), false));
@@ -279,12 +299,9 @@ impl PrintPipeline {
         let cmy_film = film::develop_pre(log_e_film, &self.film, &self.pre);
         let log_e_print = self.print_expose_pre(cmy_film);
         let cmy_print = [
-            film::interp_clamped_scalar(log_e_print[0], &self.paper.data.log_exposure,
-                &self.print_curves.iter().map(|r| r[0]).collect::<Vec<_>>()),
-            film::interp_clamped_scalar(log_e_print[1], &self.paper.data.log_exposure,
-                &self.print_curves.iter().map(|r| r[1]).collect::<Vec<_>>()),
-            film::interp_clamped_scalar(log_e_print[2], &self.paper.data.log_exposure,
-                &self.print_curves.iter().map(|r| r[2]).collect::<Vec<_>>()),
+            crate::printing::interp_on_curves(log_e_print[0], &self.paper.data.log_exposure, &self.print_curves, 0),
+            crate::printing::interp_on_curves(log_e_print[1], &self.paper.data.log_exposure, &self.print_curves, 1),
+            crate::printing::interp_on_curves(log_e_print[2], &self.paper.data.log_exposure, &self.print_curves, 2),
         ];
         crate::printing::scan_print_rgb_out(cmy_print, &self.paper, &self.tables, self.output_gamut.as_deref())
     }
@@ -310,30 +327,13 @@ impl PrintPipeline {
         out
     }
 
-    /// 批量（M2-B 已验证分阶段函数 + rayon 并行）。
+    /// 批量（M3b 零分配预计算快速路径 + rayon 并行）。
     pub fn process_image(&self, linear: &[[f64; 3]]) -> Vec<[f64; 3]> {
         use rayon::prelude::*;
-        let log_e: Vec<[f64; 3]> = linear
+        linear
             .par_iter()
-            .map(|&rgb| expose(rgb, &self.raw_lut, &self.tables))
-            .collect();
-        let cmy_film: Vec<[f64; 3]> = log_e
-            .par_iter()
-            .map(|&lr| film::develop_pre(lr, &self.film, &self.pre))
-            .collect();
-        let log_e_print: Vec<[f64; 3]> = cmy_film
-            .par_iter()
-            .map(|&cmy| {
-                crate::printing::print_expose(
-                    cmy, &self.film, &self.paper, &self.tables,
-                    self.factor_midgray, self.cc,
-                )
-            })
-            .collect();
-        let cmy_print = crate::printing::develop_print_batch(&log_e_print, &self.paper);
-        cmy_print
-            .par_iter()
-            .map(|&cmy| crate::printing::scan_print_rgb_out(cmy, &self.paper, &self.tables, self.output_gamut.as_deref()))
+            .enumerate()
+            .map(|(px, &rgb)| self.process_pixel_at(px, rgb))
             .collect()
     }
 }

@@ -291,7 +291,7 @@ mod debug_grain {
     #[test]
     #[ignore = "手工 bisect 用"]
     fn debug_first_pixel() {
-        let raw = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_grain.json")).unwrap();
+        let raw = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_grain.json")).unwrap();
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         let profile = crate::profile::load_profile("kodak_portra_400").unwrap();
         let _ = load_tables(&oracle_dir().display().to_string());

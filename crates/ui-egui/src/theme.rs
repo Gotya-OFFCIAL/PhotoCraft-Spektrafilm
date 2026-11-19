@@ -766,7 +766,8 @@ impl Tokens {
 
     /// Tokens for the active theme (stored in egui's context data by [`apply`]).
     pub fn get(ctx: &egui::Context) -> Tokens {
-        ctx.data(|d| d.get_temp::<Tokens>(egui::Id::unique("photocraft-theme"))).unwrap_or_else(|| Tokens::for_kind(ThemeKind::Studio))
+        let t = ctx.data(|d| d.get_temp::<Tokens>(egui::Id::unique("photocraft-theme"))).unwrap_or_else(|| Tokens::for_kind(ThemeKind::Studio));
+        apply_spektra_override(t)
     }
 
     /// Thin RGB outlines; the filled bands use the same hues with subdued coverage.
@@ -1015,12 +1016,45 @@ pub fn mono(size: f32) -> FontId {
     FontId::monospace(size)
 }
 
+/// Override dark-mode theme tokens with SpektraLab's warm darkroom palette when running under the Spektra brand.
+fn apply_spektra_override(mut t: Tokens) -> Tokens {
+    if crate::brand::is_spektra() && t.dark() {
+        // SpektraLab warm darkroom palette (`theme.css`): warm charcoal #2d2d2c cards,
+        // #1e1f1e fields, #f9f7f3 warm ivory text, and #e1a95f amber-gold accent.
+        t.chrome = Color32::from_rgb(38, 38, 37);
+        t.dock = Color32::from_rgb(32, 32, 31);
+        t.card = Color32::from_rgb(45, 45, 44);
+        t.card_border = Color32::from_rgb(58, 59, 57);
+        t.canvas = Color32::from_rgb(26, 26, 25);
+        t.canvas_dot = Color32::from_rgb(48, 48, 46);
+        t.field = Color32::from_rgb(30, 31, 30);
+        t.field_border = Color32::from_rgb(74, 75, 73);
+        t.hover = Color32::from_rgb(59, 59, 58);
+        t.pressed = Color32::from_rgb(74, 74, 73);
+        t.text = Color32::from_rgb(249, 247, 243);
+        t.text_dim = Color32::from_rgb(218, 216, 212);
+        t.text_faint = Color32::from_rgb(148, 146, 142);
+        t.icon = Color32::from_rgb(232, 230, 225);
+        t.accent = Color32::from_rgb(225, 169, 95);
+        t.accent_soft = Color32::from_rgba_unmultiplied(225, 169, 95, 48);
+        t.accent_border = Color32::from_rgb(225, 169, 95);
+        t.accent_text = Color32::from_rgb(235, 188, 120);
+        t.separator = Color32::from_rgb(58, 59, 57);
+        t.primary_bg = Color32::from_rgb(225, 169, 95);
+        t.primary_text = Color32::from_rgb(15, 14, 14);
+        t.tab_strip = Color32::from_rgb(32, 32, 31);
+        t.row_selected = Color32::from_rgb(68, 67, 64);
+        t.histogram_bg = Color32::from_rgb(30, 31, 30);
+    }
+    t
+}
+
 /// Apply a theme to egui's global style and publish its tokens.
 pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
     // Keep native windows at SystemDefault so macOS continues reporting OS appearance changes,
     // including when an integration or restored egui state pinned its own theme preference.
     ctx.set_theme(egui::ThemePreference::System);
-    let t = Tokens::for_kind(kind);
+    let t = apply_spektra_override(Tokens::for_kind(kind));
     ctx.data_mut(|d| d.insert_temp(egui::Id::unique("photocraft-theme"), t));
     let mut v = if t.dark() { Visuals::dark() } else { Visuals::light() };
     v.panel_fill = t.chrome;

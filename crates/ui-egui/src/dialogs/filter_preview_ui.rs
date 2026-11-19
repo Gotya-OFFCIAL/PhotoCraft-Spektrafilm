@@ -195,7 +195,10 @@ pub(crate) fn reserved_height(f: &Map<String, Value>) -> f32 {
 /// checkbox, as in Photoshop. Image › Rotation › Arbitrary and the adjustment dialogs keep only
 /// the on-canvas preview, and Select and Mask has its own view.
 fn shows(f: &Map<String, Value>) -> bool {
-    f.contains_key("__preview") && !crate::select_mask_view::owns(f) && f.get("__command").and_then(Value::as_str).is_some_and(|c| c.starts_with("filter."))
+    f.contains_key("__preview")
+        && !crate::select_mask_view::owns(f)
+        && !crate::spektra_ui::owns(f)
+        && f.get("__command").and_then(Value::as_str).is_some_and(|c| c.starts_with("filter."))
 }
 
 /// The next zoom level up or down from `zoom`, clamped to [`ZOOM_STEPS`]' ends.
@@ -258,7 +261,7 @@ fn document_size(proxy: [u32; 2], k: u32) -> Vec2 {
 }
 
 /// A composite as monitor pixels, matching the canvas (`canvas::display_image`).
-fn upload(ctx: &egui::Context, app: &PhotocraftApp, name: &str, doc: &Document) -> egui::TextureHandle {
+pub(crate) fn upload(ctx: &egui::Context, app: &PhotocraftApp, name: &str, doc: &Document) -> egui::TextureHandle {
     // Reduce only the display texture when a full-resolution result exceeds the device limit.
     // The cached document and the window's document-pixel zoom coordinates stay at full size.
     let factor = texture_factor(doc.size.width, doc.size.height, ctx.input(|i| i.max_texture_side));

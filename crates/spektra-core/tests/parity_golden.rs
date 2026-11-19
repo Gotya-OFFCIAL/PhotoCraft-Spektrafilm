@@ -8,7 +8,7 @@ use spektra_core::pipeline::{expose, NegativeScanPipeline};
 use spektra_core::profile::{load_profile, load_raw_lut, load_tables};
 use spektra_core::oracle_dir;
 
-const GOLDEN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_vectors.json");
+const GOLDEN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_vectors.json");
 
 struct Golden {
     ramp: GoldenSet,
@@ -159,7 +159,7 @@ fn parity_against_upstream_oracle() {
 #[test]
 fn parity_positive_velvia_scan_film() {
     const GOLDEN_VELVIA: &str =
-        concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_vectors_velvia.json");
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_vectors_velvia.json");
     let raw = std::fs::read_to_string(GOLDEN_VELVIA).expect("golden_vectors_velvia.json");
     let v: serde_json::Value = serde_json::from_str(&raw).expect("golden json parse");
     assert_eq!(
@@ -186,7 +186,7 @@ fn patch_names_match_golden() {
 
 // ===================== M2-B：print 链对拍 =====================
 
-const GOLDEN_PRINT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_print.json");
+const GOLDEN_PRINT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_print.json");
 
 struct GoldenPrintSet {
     input: Vec<[f64; 3]>,
@@ -276,9 +276,9 @@ fn parity_print_chain() {
 // ===================== M2-C：DIR 成色剂对拍 =====================
 
 const GOLDEN_COULPLERS: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_couplers.json");
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_couplers.json");
 const GOLDEN_PRINT_COULPLERS: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_print_couplers.json");
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_print_couplers.json");
 
 fn parse_node(v: &serde_json::Value) -> (Vec<[f64; 3]>, Vec<[f64; 3]>, Vec<[f64; 3]>, Vec<[f64; 3]>) {
     (
@@ -360,9 +360,9 @@ fn parity_couplers_print() {
 
 // ===================== M2-D1：输入侧色域压缩对拍 =====================
 
-const GOLDEN_GAMUT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_gamut_in.json");
+const GOLDEN_GAMUT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_gamut_in.json");
 const GOLDEN_PRINT_GAMUT: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_print_gamut_in.json");
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_print_gamut_in.json");
 
 /// scan_film 链 + 输入色域压缩 ON
 #[test]
@@ -414,9 +414,9 @@ fn parity_gamut_in_print() {
 // ===================== M2-D2：输出侧 cam16ucs 色域压缩对拍 =====================
 
 const GOLDEN_GAMUT_OUT: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_gamut_out.json");
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_gamut_out.json");
 const GOLDEN_PRINT_GAMUT_OUT: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_print_gamut_out.json");
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_print_gamut_out.json");
 
 /// scan_film 链 + 输出 cam16ucs 压缩（上游默认：knee 0/1/6 + 亮度 roll-off 0.7/1/2.2）
 #[test]
@@ -462,7 +462,7 @@ fn parity_gamut_out_print() {
 
 // ===================== M2-E：颗粒对拍 =====================
 
-const GOLDEN_GRAIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/golden_grain.json");
+const GOLDEN_GRAIN: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/golden_grain.json");
 
 /// 颗粒开启（子层 3×3 路径，随机场由 oracle 导出；RNG 本身不在对拍范围）
 #[test]

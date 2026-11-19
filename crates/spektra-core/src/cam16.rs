@@ -265,7 +265,7 @@ mod tests {
     fn cam16_forward_inverse_matches_colour() {
         let t = load_tables(&oracle_dir().display().to_string()).unwrap();
         let env = srgb_cam16_env(&t);
-        let raw = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle-data/matrices.json")).unwrap();
+        let raw = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/spektra/oracle/matrices.json")).unwrap();
         let v: Value = serde_json::from_str(&raw).unwrap();
         let refs = &v["cam16_reference"];
         for (name, r) in refs.as_object().unwrap() {

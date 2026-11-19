@@ -13,12 +13,15 @@ const ICON_PNG: &[u8] = include_bytes!("../../../../assets/app-icon/hicolor/128x
 /// install the app under their own product name). Same rounded-corner tile contract.
 const SPEKTRA_PNG: &[u8] = include_bytes!("../../../../assets/app-icon/spektra/mark-128.png");
 
+/// Whether the app is running under the `PhotoCraft-Spektrafilm` brand (`PHOTOCRAFT_BRAND_MARK=spektra`).
+pub fn is_spektra() -> bool {
+    static SPEKTRA: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SPEKTRA.get_or_init(|| std::env::var("PHOTOCRAFT_BRAND_MARK").as_deref() == Ok("spektra"))
+}
+
 /// The icon's pixels (one transparent pixel if it couldn't be decoded, which a test rules out).
 fn decode() -> egui::ColorImage {
-    let bytes = match std::env::var("PHOTOCRAFT_BRAND_MARK").as_deref() {
-        Ok("spektra") => SPEKTRA_PNG,
-        _ => ICON_PNG,
-    };
+    let bytes = if is_spektra() { SPEKTRA_PNG } else { ICON_PNG };
     let rgba = photocraft_codecs::decode(bytes).ok().map(|img| img.convert(ChannelLayout::Rgba, SampleType::U8));
     match rgba {
         Some(img) if img.data().len() == img.width() as usize * img.height() as usize * 4 => {

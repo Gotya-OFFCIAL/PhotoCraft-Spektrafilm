@@ -1,7 +1,6 @@
-# SpektraFilm 资产部署（PhotoCraft fork · spektra-film-integration 分支）
+# SpektraFilm 资产部署（PhotoCraft-Spektrafilm · `custom-combined` 分支）
 
-本分支通过源码级集成（路线 D）把 [spektrafilm](https://github.com/andreavolpato/spektrafilm) 的物理胶片模拟
-（spektra-core，GPL-3.0-or-later）接入 PhotoCraft，提供 `filter.spektra.filmSim` 滤镜（GUI：Filter › SpektraFilm › Film Simulation…；CLI：`photocraft-cli run`）。
+本分支通过源码级集成（路线 D）把 [spektrafilm](https://github.com/andreavolpato/spektrafilm) / [spektrafilm-rust](https://github.com/turbasvin/spektrafilm-rust) 的物理胶片模拟（`spektra-core`，GPL-3.0-or-later）与 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 风格三栏暗房工作台接入 PhotoCraft，提供 `filter.spektra.filmSim` 滤镜（GUI：`滤镜 › SpektraFilm › 胶片模拟…` 及顶部/属性栏快捷入口；CLI：`photocraft-cli run`）。完整暗房工作台与扩展物理参数说明见 [`USAGE.zh-CN.md`](USAGE.zh-CN.md)。
 
 ## 资产布局
 
@@ -43,35 +42,23 @@ spektra/
 校验：`spektra/` 包 SHA-256 见发布页；资产与代码版本错配会导致错误结果（见"版本对应"）。
 
 ## CLI 用法
-```
-photocraft-cli run in.png --cmd filter.spektra.filmSim --params "{\"film\":\"kodak_portra_400\",\"ev\":0,\"printChain\":false}" --out out.png
+```bash
+photocraft-cli run in.png --cmd filter.spektra.filmSim --params "{\"film\":\"kodak_portra_400\",\"ev\":0,\"printChain\":true}" --out out.png
 ```
 
 | 参数 | 说明 | 默认 |
 |---|---|---|
-| `film` | `oracle/profiles/` 下 JSON 文件名去扩展名 | `kodak_portra_400` |
-| `paper` | 相纸 stock，仅 `printChain` 开启时使用 | `kodak_portra_endura` |
-| `ev` | 曝光补偿 -4..4（线性输入按 2^ev 缩放） | `0` |
-| `printChain` | 完整 print 链（负片→相纸→扫描）；关闭则仅负片直扫 | `false` |
+| `film` | `oracle/profiles/` 下 JSON 文件名去扩展名（22 种胶片） | `kodak_portra_400` |
+| `paper` | 相纸 stock（6 种相纸），仅负片/电影片且 `printChain` 开启时使用（正片自动透射直扫） | `kodak_portra_endura` |
+| `ev` | 相机曝光补偿 -4..4（线性输入按 2^ev 缩放） | `0` |
+| `printChain` | 完整暗房相纸印相链（负片→放大机→相纸→扫描）；`false` 仅输出负片直扫（研究用途） | `true` |
+| 扩展参数 | `couplers` / `couplersAmount` / `inputGamut` / `outputGamut` / `printEv` / `ccCyan` / `ccMagenta` / `ccYellow` | 关 / `0` |
 
 Windows cmd 不支持单引号，JSON 内双引号需转义（`\"`）；PowerShell 可用单引号包裹整个 JSON。
 仅支持 RGB 图层；智能对象上应用会记录为可重渲染的智能滤镜。建议把 `spektra/` 放在 CLI 二进制旁，或在任意目录运行前设置 env（第 3 级按 CWD 解析）。
 
-## 版本对应
+## 版本与许可证
 
-| fork 分支 | spektra-core | 资产包 |
-|---|---|---|
-| spektra-film-integration | <commit/tag> | v1 · SHA-256: <待补> |
-
-资产与 spektra-core 版本必须严格对应；升级任一者须同步另一方，并用 golden 向量回归对拍。
-
-## 数据来源
-
-oracle 静态表与 profile JSON 的来源与许可（维护者填充，随附 `assets/spektra/LICENSES/`）：
-- CMF / illuminant：CIE 公开数据（<待补版本/年份>）；spectra LUT / matrices / raw LUT / filters：上游生成脚本产出（<待补脚本/commit>）；profile JSON：上游测量/拟合数据生成（<待补>）。
-
-## 许可证与归属
-
-- `spektra-core` 及本 fork 构建整体适用 **GPL-3.0-or-later**（上游 spektrafilm 母本 GPL-3.0），与 PhotoCraft 的 MIT/Apache 双许可不兼容；分发时须按 GPL 提供源码与声明，并保留上游版权声明。
-- 上游作者：Andrea Volpato 及 spektrafilm 贡献者（https://github.com/andreavolpato/spektrafilm）。
-- 若需保持 MIT/Apache，应改为独立进程集成（路线 B/外部服务）。
+- 本组合源码及构建产物整体适用 **GPL-3.0-or-later**（见仓库根目录 [`LICENSE-GPLv3`](../../LICENSE-GPLv3) 与 [`NOTICE`](../../NOTICE)）；胶片/相纸测量数据文件采用 CC BY-SA 4.0（详见 [`ATTRIBUTION.md`](../../ATTRIBUTION.md)）。
+- 上游致谢：`storytold/photocraft`（PhotoCraft 基座）、`andreavolpato/spektrafilm`（Python 物理建模母本）、`turbasvin/spektrafilm-rust`（Rust `spektra-core` 移植）、`JamesQiu2005/SpektraLab`（三栏暗房界面与胶片盒封面设计参考）。
+- 若需保留纯 MIT/Apache 许可，请移除 `crates/spektra-core/` 并改用独立进程通信（路线 B）。

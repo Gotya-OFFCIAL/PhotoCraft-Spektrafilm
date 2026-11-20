@@ -1,3 +1,52 @@
+# PhotoCraft-Spektrafilm
+
+> **定制整合版 · Custom Combined Edition** (`custom-combined`)
+> 基于最新上游 **[storytold/photocraft](https://github.com/storytold/photocraft)**（v0.23.1+，`856f865cf`），源码级集成 **SpektraFilm 光谱胶片暗房工作台**（`crates/spektra-core` + SpektraLab 三栏暗房 UI）、**PR #4811 Content Edges 内容边缘吸附补丁**，并补全 **简体中文 (`zh-hans`) 全量汉化**（`1700/1700` + 右键菜单与路径弹窗全覆盖）。
+
+- **License / 许可证**：由于静态集成了 GPL-3.0-or-later 的 `crates/spektra-core/` 与衍生自 [SpektraLab](https://github.com/JamesQiu2005/SpektraLab) 的暗房 UI/胶片盒封面，**本整合仓库及所有二进制分发产物整体依据 [GPL-3.0-or-later](LICENSE-GPLv3) 发布**（PhotoCraft 原有代码保留其 [MIT](LICENSE-MIT) / [Apache-2.0](LICENSE-APACHE) 许可声明，光谱 profile 数据遵循 CC BY-SA 4.0；完整声明见 [NOTICE](NOTICE)、[ATTRIBUTION.md](ATTRIBUTION.md) 与 [packaging/spektra/GPL-COMPLIANCE.md](packaging/spektra/GPL-COMPLIANCE.md)）。
+- **Upstream Credits / 上游致谢**：
+  - [storytold/photocraft](https://github.com/storytold/photocraft) — PhotoCraft 宿主引擎与界面框架（含 `storytold/craft-i18n` 与 `storytold/craft-libs`）
+  - [andreavolpato/spektrafilm](https://github.com/andreavolpato/spektrafilm) — 81 波长（380–780 nm）光谱胶片物理仿真母本
+  - [turbasvin/spektrafilm-rust](https://github.com/turbasvin/spektrafilm-rust) — `spektra-core` Rust 移植实现
+  - [JamesQiu2005/SpektraLab](https://github.com/JamesQiu2005/SpektraLab) — 三栏暗房工作台交互设计与胶片盒封面参考
+
+## 特色增强 / Enhancements
+
+1. **SpektraFilm 光谱胶片暗房工作台 (`filter.spektra.filmSim`)**
+   - **三栏暗房 UI**（`crates/ui-egui/src/dialogs/spektra_ui.rs`）：22 种胶片（含嵌入式胶片盒封面图与 `CINE` 标识）+ 6 种相纸 + 负片直扫 + 自动配纸；中央 `显影 / 分屏对比 / 原图` 拖动视口与 64-bin RGB 直方图；右侧 5 组预设、宽容度曲线、曝光 EV、负片 DIR 成色剂（正片自动透射直扫安全保护）、TH-KG3 放大机中性 CC / Print EV / C·M·Y 滤色头、CAM16-UCS 输出色域压缩。
+   - **快捷入口**：菜单 `滤镜 › SpektraFilm › 胶片模拟…`、顶部选项栏「`✦ SpektraFilm 胶片暗房`」与属性/调整面板入口；启用 `PHOTOCRAFT_BRAND_MARK=spektra` 时切换为暖炭黑 + 琥珀金 (`#e1a95f`) 暗房主题与定制徽章。
+   - **免环境变量便携运行**：将仓库 `assets/spektra/` 复制为可执行文件同级 `spektra/` 即可直接运行（详见 [packaging/spektra/USAGE.zh-CN.md](packaging/spektra/USAGE.zh-CN.md) 与 [packaging/spektra/README.md](packaging/spektra/README.md)）。
+2. **PR #4811 Content Edges 内容边缘吸附**
+   - 裁剪框支持对齐画布内图层内容边界（`crates/ui-egui/src/canvas/snap_ui.rs`）。
+3. **简体中文全量汉化归档 (`zh-hans`)**
+   - 包含 `storytold/craft-i18n@6ccdd32c` 上游主干与针对 PhotoCraft 全界面及右键画布/路径菜单、弹窗的完整简体中文补丁与修正记录，存档于 [`packaging/spektra/i18n/zh-hans-photocraft-additions.tsv`](packaging/spektra/i18n/zh-hans-photocraft-additions.tsv)。
+4. **Windows 独立便携启动器**
+   - 源码与图标位于 [`packaging/spektra/launcher/`](packaging/spektra/launcher/) 与 [`packaging/spektra/icon/`](packaging/spektra/icon/)（自动设置窗口标题与 `PHOTOCRAFT_BRAND_MARK=spektra`）。
+
+## 从源码构建 / Building from Source
+
+```bash
+# 1. 准备 craft-i18n 并应用简体中文补丁（可选但推荐，构建完整多语言界面）
+git clone https://github.com/storytold/craft-i18n.git ../craft-i18n
+git -C ../craft-i18n checkout 6ccdd32c58ccbe6f278ff3e534be003b1689805b
+# 将 packaging/spektra/i18n/zh-hans-photocraft-additions.tsv 中的译文合并至 ../craft-i18n/locales/zh-hans/photocraft.tsv
+# （并移除注释头列出的 13 条英文自覆盖行）
+
+# 2. 编译 Release 二进制（GUI + CLI）
+CRAFT_I18N_DIR="$(realpath ../craft-i18n)" CRAFT_I18N_REQUIRED=1 \
+  cargo build --release --bin photocraft --bin photocraft-cli
+
+# 3. 便携部署目录示例
+# deploy/
+#   photocraft.exe
+#   photocraft-cli.exe
+#   spektra/                 <- 复制自 assets/spektra/
+#   portable.txt             <- 空文件，启用同目录 PhotoCraftData/ 便携配置
+#   LICENSE-GPLv3 NOTICE ATTRIBUTION.md README.md
+```
+
+---
+
 <p align="center">
   <a href="https://getartcraft.com/">
     <picture>

@@ -1,0 +1,735 @@
+# Simplified Chinese (zh-hans) UI translation additions & fixes for PhotoCraft-Spektrafilm.
+# Base upstream storytold/craft-i18n commit: 6ccdd32c58ccbe6f278ff3e534be003b1689805b
+# Columns: context <TAB> English source text <TAB> translation
+#
+# Note: Remove these 13 broken English self-overrides from upstream locales/zh-hans/photocraft.tsv
+# so PhotoCraft falls back to the existing Chinese translations in locales/zh-hans/common.tsv:
+#   REMOVE: \t(none)
+#   REMOVE: \tAuthor
+#   REMOVE: \tCompare
+#   REMOVE: \tDisplay
+#   REMOVE: \tDot
+#   REMOVE: \tFull Screen
+#   REMOVE: \tKeywords
+#   REMOVE: \tLight Intensity
+#   REMOVE: \tLink
+#   REMOVE: \tNext
+#   REMOVE: \tOval
+#   REMOVE: \tThickness
+#   REMOVE: \tUnsharp Mask
+#
+	16 Bit	16 位
+	32 Bit	32 位
+	32-bit Preview Options	32 位预览选项
+	8 Bit	8 位
+	A command was canceled or stopped during batch processing. Continue with the next file or stop?	批处理期间有命令被取消或停止。是否继续处理下一个文件，还是停止？
+	A custom shape is placed from its preset	从预设放置自定形状
+	A file is still being placed; try again when it has finished.	文件仍在置入中；请等待完成后重试。
+	Action playback failed: {error}	动作回放失败：{error}
+	Actual Color	实际颜色
+	Adaptive Wide Angle	自适应广角
+	Add Anchor Point	添加锚点
+	Add Noise	添加杂色
+	Add Path to Selection	将路径添加到选区
+	Add Variable	添加变量
+	Add artboard	添加画板
+	Add the files to load	添加要载入的文件
+	Add to Selection	添加到选区
+	Added swatch {name}	已添加色板 {name}
+	Adjustment	调整
+	Adjustment Composite	调整合成
+	Adobe RGB (1998)	Adobe RGB (1998)
+	Adwaita (Dark)	Adwaita（深色）
+	Adwaita (Light)	Adwaita（浅色）
+	Align Edges	对齐边缘
+	Align To:	对齐到：
+	Align:	对齐：
+	All Tools	所有工具
+	All Visible Layers	所有可见图层
+	All open documents	所有打开的文档
+	Allows rotation and scaling of selection	允许旋转和缩放选区
+	Always use Pressure for Size. When off, Brush Preset controls pressure	始终使用压力控制大小；关闭时由画笔预设控制压力
+	Angle and roundness	角度与圆度
+	Angled Strokes	成角的线条
+	Answer the open import question first, then import this file again.	请先回答打开的导入询问，然后再重新导入此文件。
+	Answer the open question first.	请先回答当前打开的询问。
+	Anti-alias brush application	画笔应用启用消除锯齿
+	Apply Image	应用图像
+	Apply Layer Comp	应用图层复合
+	Apply the removal	应用移除
+	Apply to All	全部应用
+	Arc Lower	下弧
+	Arc Upper	上弧
+	Arch	拱形
+	Are you sure you want to delete all notes?	确定要删除所有注释吗？
+	Arrange Panels	排列面板
+	Artboard from Group	从组创建画板
+	Artboard from Layers	从图层创建画板
+	As:	作为：
+	Assign Profile	指定配置文件
+	Author Title	作者头衔
+	Auto Scale Image	自动缩放图像
+	Auto spacing	自动间距
+	Auto-Align Layers	自动对齐图层
+	Auto-Blend Layers	自动混合图层
+	BMP	BMP
+	Back	返回
+	Backend: {backend} ({type})	后端：{backend}（{type}）
+	Bamboo	竹影
+	Bas Relief	基底凸现
+	Batch preview	批处理预览
+	Black Color	黑色
+	Blend Images Together	将图像混合在一起
+	Bloat	膨胀
+	Blur Pins	模糊图钉
+	Bold Italic	粗斜体
+	Box Blur	方框模糊
+	Breeze Dark	Breeze（深色）
+	Breeze Light	Breeze（浅色）
+	Brush Preset	画笔预设
+	Brush tips	画笔笔尖
+	CMYK 16 bit	CMYK 16 位
+	CPU Rendering	CPU 渲染
+	Calculating…	正在计算…
+	Calculations	计算
+	Cancel any current edits	取消当前编辑
+	Cancel current crop operation	取消当前裁剪操作
+	Cancel transform	取消变换
+	Cancelled placing {name}	已取消置入 {name}
+	Canvas Size	画布大小
+	Canvas menu	画布菜单
+	Chalk & Charcoal	粉笔和炭笔
+	Channel Options	通道选项
+	Charcoal	炭笔
+	Choose a displacement map	选择置换图
+	Choose a remix mode	选择重组模式
+	Chromatic Aberration	色差
+	Chrome	铬黄渐变
+	Circularity	圆度
+	Classic gradient	经典渐变
+	Clipping Path	剪贴路径
+	Clipping Path…	剪贴路径…
+	Clone source	仿制源
+	Clone source overlay	仿制源叠加
+	Clone source set at {x}, {y}	已将仿制源设为 ({x}, {y})
+	Close Other Panels in Group	关闭组内其他面板
+	Close the Color Picker first.	请先关闭拾色器。
+	Closed document	已关闭的文档
+	Collage	拼贴
+	Color Decontaminate	净化颜色
+	Color Halftone	彩色半调
+	Color Picker (Custom Canvas Color)	拾色器（自定画布颜色）
+	Color Range	色彩范围
+	Color management: {error}	色彩管理：{error}
+	Color samplers	颜色取样器
+	Colored Pencil	彩色铅笔
+	Command Palette	命令面板
+	Commit	提交
+	Commit any current edits	提交当前编辑
+	Commit current crop operation	提交当前裁剪操作
+	Commit or cancel the transform first	请先提交或取消变换
+	Commit transform	提交变换
+	Conditional Mode Change	条件模式更改
+	Confirm or cancel the pending Record Again editor first.	请先确认或取消挂起的“再次记录”编辑器。
+	Confirm or cancel the pending menu item first.	请先确认或取消挂起的菜单项。
+	Content	内容
+	Content-Aware Fill Transparent Areas	内容识别填充透明区域
+	Content-Aware Move	内容感知移动
+	Conté Crayon	炭精棒
+	Convert Profile to sRGB	将配置文件转换为 sRGB
+	Convert to Linked	转换为链接对象
+	Convert to Profile	转换为配置文件
+	Cooling Filter (80)	冷却滤镜 (80)
+	Cooling Filter (82)	冷却滤镜 (82)
+	Cooling Filter (LBB)	冷却滤镜 (LBB)
+	Copy CSS	复制 CSS
+	Copy Complete Stroke	复制完整描边
+	Copy Fill	复制填充
+	Copyright Status	版权状态
+	Copyrighted	受版权保护
+	Could not set the clone source because it does not work with Indexed Color images (convert image to RGB Color mode to edit).	无法设置仿制源，因为它不适用于索引颜色图像（请将图像转换为 RGB 颜色模式后再编辑）。
+	Could not use the clone stamp tool because the area to clone has not been defined (Alt-click to define a source point).	无法使用仿制图章工具，因为尚未定义要仿制的区域（按住 Alt 键单击以定义源点）。
+	Could not use the clone stamp tool because the area to clone has not been defined (Option-click to define a source point).	无法使用仿制图章工具，因为尚未定义要仿制的区域（按住 Option 键单击以定义源点）。
+	Could not use the magic eraser because it does not work with Bitmap images (convert image to Grayscale mode to edit).	无法使用魔术橡皮擦，因为它不适用于位图图像（请将图像转换为灰度模式后再编辑）。
+	Could not use the magic eraser because it does not work with Indexed Color images (convert image to RGB Color mode to edit).	无法使用魔术橡皮擦，因为它不适用于索引颜色图像（请将图像转换为 RGB 颜色模式后再编辑）。
+	Could not use the type tool because the layer is locked.	无法使用文字工具，因为该图层已锁定。
+	Could not use the {tool} because the target layer is a group.	无法使用{tool}，因为目标图层是一个组。
+	Couldn't save preferences: {error}. Retrying…	无法保存首选项：{error}。正在重试…
+	Count Color	计数颜色
+	Count Group	计数组
+	Count Group Name	计数组名称
+	Count Group Name:	计数组名称：
+	Count group color	计数组颜色
+	Count markers	计数标记
+	Craquelure	龟裂缝
+	Create Vector Mask	创建矢量蒙版
+	Create new layer	创建新图层
+	Create new layer with results	用结果创建新图层
+	Crop presets	裁剪预设
+	Currency	货币符号
+	Current document	当前文档
+	Cutout	木刻
+	Cylindrical	圆柱面
+	Cyrillic	西里尔文
+	Data Points	数据点
+	Data Set: {name}  ({index}/{total})	数据组：{name}（{index}/{total}）
+	Data Sets as Files is unavailable on the web	“将数据组导出为文件”在网页端不可用
+	Decrease Type Size	减小字号
+	Decrease Type Size by 10	将字号减小 10
+	Deep Blue	深蓝
+	Deep Emerald	深祖母绿
+	Deep Red	深红
+	Deep Yellow	深黄
+	Define Custom Shape	定义自定形状
+	Define Pattern	定义图案
+	Defringe	去边
+	Delete Anchor Point	删除锚点
+	Delete Crop Preset	删除裁剪预设
+	Delete Hidden Layers	删除隐藏图层
+	Delete Note	删除注释
+	Delete Path	删除路径
+	Delete Snapshot	删除快照
+	Delete the currently selected count group	删除当前选中的计数组
+	Delete this note?	要删除此注释吗？
+	Detect Faces	检测人脸
+	Determines the spread of replaced color	决定替换颜色的扩展范围
+	Diffuse	扩散
+	Dir	目录
+	Disable Symmetry Path	停用对称路径
+	Displace	置换
+	Display profile not used	未使用显示器配置文件
+	Display profiles: {reason}	显示器配置文件：{reason}
+	Distribute Spacing:	分布间距：
+	Distribute:	分布：
+	Do not erase the foreground swatch color	不擦除前景色板颜色
+	Document Tab	文档标签页
+	Don't Enlarge	不放大
+	Drawn on the CPU: {reason}. Click for System Info.	由 CPU 绘制：{reason}。点击查看系统信息。
+	Dropped files weren't placed: their document was closed.	拖放的文件未置入：其所属文档已关闭。
+	Dropped files weren't placed: too many are waiting for their document.	拖放的文件未置入：等待打开所属文档的文件过多。
+	Dry Brush	干画笔
+	Duplicate Group…	复制组…
+	Duplicate Layer Comp	复制图层复合
+	Duplicate Layers	复制图层
+	Dust & Scratches	蒙尘与划痕
+	Edge Extension	边缘扩展
+	Edit Type…	编辑文字…
+	Enable to remix all layers	启用以重组所有图层
+	Entire Image	整个图像
+	Equalize Histogram	均衡化直方图
+	Erase range of similar colors	擦除相近颜色范围
+	Erase with Brush or Pencil (hold)	使用画笔或铅笔擦除（按住）
+	Error Log	错误日志
+	Ev	曝光补偿
+	Event	事件
+	Exit Quick Mask	退出快速蒙版
+	Export As: {name}	导出为：{name}
+	Export As: {n} layers	导出为：{n} 个图层
+	Export Contents	导出内容
+	Export Paths to File	将路径导出到文件
+	Export/Import Presets	导出/导入预设
+	Exported contents to {path}	已将内容导出到 {path}
+	Exported presets to {path}	已将预设导出到 {path}
+	Exported to {file}	已导出到 {file}
+	Extrude	凸出
+	Eyedroppers	吸管
+	F	F
+	Fallback: {reason}	回退原因：{reason}
+	Feather Radius (pixels):	羽化半径（像素）：
+	Fibers	纤维
+	Field Blur	场景模糊
+	File Info	文件简介
+	File Name Prefix	文件名前缀
+	File Type	文件类型
+	Filename	文件名
+	Fill Path	填充路径
+	Fill Path…	填充路径…
+	Fill from History	从历史记录填充
+	Fill with Background Color	用背景色填充
+	Fill with Background Color, Preserve Transparency	用背景色填充并保留透明区域
+	Fill with Foreground Color	用前景色填充
+	Fill with Foreground Color, Preserve Transparency	用前景色填充并保留透明区域
+	Film	胶片
+	Film Grain	胶片颗粒
+	Film Simulation	胶片模拟
+	Film Simulation…	胶片模拟…
+	Filter Gallery	滤镜库
+	Fish	鱼形
+	Fit Image	限制图像大小
+	Flag	旗帜
+	Flatness:	平滑度：
+	Focus Area	焦点区域
+	Forward Warp	向前变形
+	Frame Rate	帧速率
+	Free Transform Path	自由变换路径
+	Free Transform Points	自由变换控制点
+	Freeze Lasso	冻结套索
+	Freeze Mask	冻结蒙版
+	Fresco	壁画
+	Fuzziness	颜色容差
+	GPU backend preference: {backend}	GPU 后端偏好：{backend}
+	GPU device was lost; using the CPU renderer.	GPU 设备已丢失；正在使用 CPU 渲染器。
+	GPU error; using the CPU renderer.	GPU 出错；正在使用 CPU 渲染器。
+	GPU retry scheduled	已安排重试 GPU
+	Generic	通用
+	Geometric Distortion	几何扭曲
+	Geometric Distortion Correction	几何扭曲校正
+	Global Light	全局光
+	Glowing Edges	照亮边缘
+	Gradient mode	渐变模式
+	Gradient style	渐变样式
+	Graphic Pen	绘图笔
+	Graphics adapter	图形适配器
+	Graphics adapter: {adapter}	图形适配器：{adapter}
+	Gray Value (Maximum)	灰度值（最大值）
+	Gray Value (Mean)	灰度值（平均值）
+	Gray Value (Median)	灰度值（中值）
+	Gray Value (Minimum)	灰度值（最小值）
+	Grayscale 16 bit	灰度 16 位
+	Greek	希腊文
+	Grid Size	网格大小
+	Group Images by Folder	按文件夹分组图像
+	HDR Toning	HDR 色调
+	HSB Color	HSB 颜色
+	HSL Color	HSL 颜色
+	Hand Tool (hold)	抓手工具（按住）
+	Hard Edge	硬边缘
+	High Memory Photoshop Document	高内存 Photoshop 文档
+	Highlight	高光
+	History Options	历史记录选项
+	Horizontal:	水平：
+	How far to let the erasing spread	允许擦除扩散的距离
+	Image Statistics	图像统计
+	Image compositor: {processor}	图像合成器：{processor}
+	Images in subfolders will start on a new Contact Sheet	子文件夹中的图像将从新的联系表开始
+	Import Brushes	导入画笔
+	Import Gradients	导入渐变
+	Import as New Group	作为新组导入
+	Import as New Group keeps “{group}” and adds the file as a new group beside it.	“作为新组导入”会保留“{group}”，并将该文件作为新组添加到其旁边。
+	Importing {what} from {file}…	正在从 {file} 导入{what}…
+	Include Subfolders	包含子文件夹
+	Increase Type Size	增大字号
+	Increase Type Size by 10	将字号增大 10
+	Ink Outlines	油墨概况
+	Input	输入
+	Input Folder	输入文件夹
+	Insert Menu Item	插入菜单项目
+	Insert Stop	插入停止
+	Integrated Density	积分密度
+	Intersect with Selection	与选区交叉
+	Invalid Zoom	无效的缩放比例
+	Invalid panel layout	面板布局无效
+	Invert Source 1	反相源 1
+	Invert Source 2	反相源 2
+	Iris Blur	光圈模糊
+	JPEG	JPEG
+	LZW Compression	LZW 压缩
+	Lab 16 bit	Lab 16 位
+	Latin 1	拉丁文 1
+	Latin Extended-A	拉丁文扩展-A
+	Latin Extended-B	拉丁文扩展-B
+	Layer Comp	图层复合
+	Layer Effects	图层效果
+	Layer From Background	从背景生成图层
+	Layer Mask Display Options	图层蒙版显示选项
+	Layer Style…	图层样式…
+	Layer marquee	图层选框
+	Layer rollover	图层悬停轮廓
+	Lens Blur	镜头模糊
+	Lens Correction	镜头校正
+	Lens Profile	镜头配置文件
+	Limits	限制
+	Line preview	直线预览
+	Lining	等高数字
+	Linked	已链接
+	Liquify	液化
+	Little memory would be left after opening this file. Close other apps first, or PhotoCraft may run out of memory.	打开此文件后剩余内存将很少。请先关闭其他应用，否则 PhotoCraft 可能会耗尽内存。
+	Load Selection	载入选区
+	Local Adaptation	局部适应
+	Lock Transparent Pixels	锁定透明像素
+	Magnetic Lasso	磁性套索
+	Make	制造商
+	Make Selection from Path	从路径建立选区
+	Make Selection…	建立选区…
+	Make Symmetry Path	生成对称路径
+	Make Work Path	建立工作路径
+	Make Work Path…	建立工作路径…
+	Make:	制造商：
+	Mask Channel	蒙版通道
+	Mask None	无蒙版
+	Match Color	匹配颜色
+	Math Symbols	数学符号
+	Matte Color	杂边颜色
+	Maximize Compatibility	最大化兼容
+	Memory Usage Percent	内存使用率
+	Merge Channels	合并通道
+	Merged	已合并
+	Minimize Panel	最小化面板
+	Minimizes clipping in shadows and highlights, and keeps colors from shifting hue	尽量减少阴影和高光裁剪，并防止色彩偏色
+	Monitor profile in use on {display}: {profile}	{display} 正在使用的显示器配置文件：{profile}
+	Monitor profile in use: {profile}	正在使用的显示器配置文件：{profile}
+	Monitor profile on {display} (main window): {profile}	{display}（主窗口）的显示器配置文件：{profile}
+	Monitor profile on {display}: {profile}	{display} 的显示器配置文件：{profile}
+	Monitor profile: {profile}	显示器配置文件：{profile}
+	Motion Blur	动感模糊
+	New Channel	新建通道
+	New Crop Preset	新建裁剪预设
+	New Guide Layout	新建参考线版面
+	New Layer Comp	新建图层复合
+	New Selection	新选区
+	New Set	新建组
+	New Spot Channel	新建专色通道
+	Next Data Set	下一数据组
+	Next Pasteboard Color	下一个粘贴板颜色
+	No anchor to delete	没有可删除的锚点
+	No colour under the pointer	指针下方没有颜色
+	No document is open.	没有打开的文档。
+	No document.	没有文档。
+	No menu item belongs to this chooser.	此选择器没有所属菜单项。
+	No options for the Add Anchor Point Tool.	“添加锚点工具”没有可用选项。
+	No options for the Delete Anchor Point Tool.	“删除锚点工具”没有可用选项。
+	No path is available for this action	当前没有可用于此操作的路径
+	No path to make a mask from: draw one with the Pen tool or select one in the Paths panel.	没有可用于创建蒙版的路径：请用钢笔工具绘制路径或在“路径”面板中选择一条路径。
+	No path to make a shape from: draw one with the Pen tool or select one in the Paths panel.	没有可用于创建形状的路径：请用钢笔工具绘制路径或在“路径”面板中选择一条路径。
+	No pixels are selected.	尚未选择任何像素。
+	No recorded step belongs to this editor.	没有属于此编辑器的已记录步骤。
+	No slices are selected. Click a slice in the preview to select it.	未选中任何切片。请点击预览中的切片以将其选中。
+	No step is waiting.	没有正在等待的步骤。
+	No type to format	没有可设置格式的文字
+	Not available yet	暂不可用
+	Note Paper	便条纸
+	Note deleted, but the preference could not be saved: {error}	注释已删除，但无法保存首选项：{error}
+	Nothing to paste: the clipboard holds no image	没有可粘贴的内容：剪贴板中没有图像
+	Nudge	微调
+	Numbers	数字
+	Numerals	数字样式
+	Ocean Ripple	海洋波纹
+	Oil Paint	油画
+	Open Panel in Own Window	在独立窗口中打开面板
+	Open Recent is unavailable on the web	“打开最近使用的文件”在网页端不可用
+	Open as Smart Object…	打开为智能对象…
+	Opened Files	已打开的文件
+	Opened {url}	已打开 {url}
+	Opening this document uses more memory and may slow down your computer or other running applications.	打开此文档会占用较多内存，可能会使计算机或其他正在运行的应用变慢。
+	Opening “{name}” requires an estimated {est} GiB of memory ({avail} GiB available).	打开“{name}”预计需要 {est} GiB 内存（当前可用 {avail} GiB）。
+	Opening “{name}” requires an estimated {est} GiB of memory. The available memory could not be measured.	打开“{name}”预计需要 {est} GiB 内存，且无法测得当前可用内存。
+	Operation	操作
+	Output Folder	输出文件夹
+	PNG	PNG
+	Package	打包
+	Paint Daubs	绘画涂抹
+	Painting Mode	绘画模式
+	Palette Knife	调色刀
+	Paper	相纸
+	Paste Complete Stroke	粘贴完整描边
+	Paste Fill	粘贴填充
+	Patch	修补
+	Path Blur	路径模糊
+	Path alignment	路径对齐方式
+	Path arrangement	路径排列方式
+	Pattern Fill…	图案填充…
+	Pause For takes a whole number of seconds	“暂停”需要整数秒数
+	Perspective Crop	透视裁剪
+	PhotoCraft	PhotoCraft-Spektrafilm
+	PhotoCraft keeps retrying; until a save succeeds, preference changes are lost when it closes.	PhotoCraft 会持续重试；在保存成功前关闭应用将丢失对首选项的更改。
+	Photomerge	图像拼接
+	Pick Color From Image	从图像吸取颜色
+	Pinch	挤压
+	Place Embedded	置入嵌入对象
+	Place Linked	置入链接对象
+	Place Scale Marker	放置比例尺标记
+	Place across first	先横向排列
+	Planes	平面
+	Plaster	石膏效果
+	Plastic Wrap	塑料包装
+	Platform: {os} {arch}	平台：{os} {arch}
+	Playhead	播放头
+	Polar Coordinates	极坐标
+	Preferences can't be saved	无法保存首选项
+	Preferences saved	首选项已保存
+	Preferences were reset: {error}	首选项已重置：{error}
+	Preparing Free Transform	正在准备自由变换
+	Pressure Curve	压感曲线
+	Previous Data Set	上一数据组
+	Previous Pasteboard Color	上一个粘贴板颜色
+	Print Chain	相纸输出（胶片观感）
+	Printed to {path}	已打印到 {path}
+	ProPhoto	ProPhoto
+	ProPhoto RGB	ProPhoto RGB
+	Proof Color	校样颜色
+	Proportional	比例宽度
+	Proportional Lining	比例等高数字
+	Proportional Oldstyle	比例旧式数字
+	Public Domain	公有领域
+	Pucker	褶皱
+	Push Left	左推像素
+	Quick Mask Options	快速蒙版选项
+	Quick Selection	快速选择
+	RAW Develop is already open	RAW 显影已打开
+	RGB 16 bit	RGB 16 位
+	Rasterize Vector Mask	栅格化矢量蒙版
+	Reading	读取中
+	Reconstruct All	全部重建
+	Recovered {name}	已恢复 {name}
+	Relink to File	重新链接到文件
+	Remove Ghosts	移除重影
+	Remove Variable	删除变量
+	Remove area after a single stroke	单次描边后立即移除区域
+	Rename Brush	重命名画笔
+	Rename Layer Comp	重命名图层复合
+	Rendering	渲染中
+	Reorder Layer	调整图层顺序
+	Replace Color	替换颜色
+	Replace Contents	替换内容
+	Replace deletes everything in “{group}” first, including presets you edited or moved there. This can't be undone.	“替换”会先删除“{group}”中的所有内容，包括你在此编辑或移动进去的预设。此操作无法撤销。
+	Reposition	自动对齐位置
+	Resize to Fit	调整大小以适合
+	Reticulation	网状
+	Ripple	波纹
+	Rise	上升
+	Rotate for best fit	旋转以获得最佳排列
+	Rough Pastels	粗糙蜡笔
+	Same as Source	与源文件相同
+	Sample	取样
+	Sample all layers	对所有图层取样
+	Sample content from all visible layers	从所有可见图层取样内容
+	Sampling	取样方式
+	Save Path	存储路径
+	Save as JPEG	存储为 JPEG
+	Save as PSD	存储为 PSD
+	Save as TIFF	存储为 TIFF
+	Save your work and restart PhotoCraft to retry GPU acceleration. CPU rendering remains active for this session.	请保存工作并重启 PhotoCraft 以重试 GPU 加速。当前会话将继续使用 CPU 渲染。
+	Saved a copy as {path}	已将副本存储为 {path}
+	Saved {path}; image assets: {n} in {dir}	已保存 {path}；图像资源：{n} 个已写入 {dir}
+	Saving	正在保存
+	Scale (%)	缩放 (%)
+	Scale Effects	缩放效果
+	Scale Factor	比例系数
+	Scale Horizontal:	水平缩放：
+	Scale Units	比例单位
+	Scale Vertical:	垂直缩放：
+	Script Events Manager	脚本事件管理器
+	Select All Layers	选择所有图层
+	Select Custom Color…	选择自定颜色…
+	Select Inverse	反选
+	Select Layer Under Cursor	选择光标下的图层
+	Select Pixels	选择像素
+	Select an action first.	请先选择一个动作。
+	Select and Mask	选择并遮住
+	Selected Adjustments	所选调整图层
+	Selected Layer	所选图层
+	Selected Layer Comp Only	仅限所选图层复合
+	Selected at launch: {backend}	启动时已选择：{backend}
+	Selection Change	选区更改
+	Selection…	选区…
+	Sent to the printer ({spooler})	已发送至打印机（{spooler}）
+	Sepia	棕褐色
+	Set 	组 
+	Set 1	样式集 1
+	Set 10	样式集 10
+	Set 11	样式集 11
+	Set 12	样式集 12
+	Set 13	样式集 13
+	Set 14	样式集 14
+	Set 15	样式集 15
+	Set 16	样式集 16
+	Set 17	样式集 17
+	Set 18	样式集 18
+	Set 19	样式集 19
+	Set 2	样式集 2
+	Set 20	样式集 20
+	Set 3	样式集 3
+	Set 4	样式集 4
+	Set 5	样式集 5
+	Set 6	样式集 6
+	Set 7	样式集 7
+	Set 8	样式集 8
+	Set 9	样式集 9
+	Set Measurement Scale	设置测量比例
+	Set additional pen and path options	设置其他钢笔与路径选项
+	Set exposure for stroke	设置描边曝光度
+	Set flow rate for stroke	设置描边流量
+	Set opacity for stroke	设置描边不透明度
+	Set the brush angle	设置画笔角度
+	Shadows/Highlights	阴影/高光
+	Shape Blur	形状模糊
+	Shape properties	形状属性
+	Shear	切变
+	Shell Lower	下贝壳
+	Shell Upper	上贝壳
+	Show Channels in Color	用原色显示通道
+	Smart Sharpen	智能锐化
+	Smudge Stick	涂抹棒
+	Snapped to 45°	已对齐到 45°
+	Software adapter	软件适配器
+	Solarized Dark	Solarized（深色）
+	Source 1 Channel	源 1 通道
+	Source 2 Channel	源 2 通道
+	Source Channel	源通道
+	Source Folder	源文件夹
+	Source Layer	源图层
+	Source: document closed	源：文档已关闭
+	Space	间距
+	Sparkle	闪烁
+	SpektraFilm	SpektraFilm
+	Spherical	球面
+	Spin Blur	旋转模糊
+	Sprayed Strokes	喷色描边
+	Squeeze	紧缩
+	Starting Serial Number	起始序列号
+	Step {step} ({id}) failed: {error}	步骤 {step}（{id}）失败：{error}
+	Stop For Errors	遇到错误时停止
+	Stop recording or playback before changing the Actions library.	更改“动作”库之前，请先停止记录或回放。
+	Stroke Path	描边路径
+	Stroke footprint	描边覆盖区
+	Stroke preview	描边预览
+	Structure	结构
+	Style Library	样式库
+	Stylistic Sets	样式集
+	Subtract Path from Selection	从选区中减去路径
+	Subtract from Selection	从选区减去
+	Surface Blur	表面模糊
+	TIFF	TIFF
+	Tablet Input	数位板输入
+	Tabular	表格等宽
+	Tabular Lining	表格等高数字
+	Tabular Oldstyle	表格旧式数字
+	Temporary	临时
+	Text frame	文本框
+	Text on path	路径文字
+	Text outline	文字轮廓
+	Texturizer	纹理化
+	Thaw Mask	解冻蒙版
+	The Actions file is too large.	“动作”文件过大。
+	The Actions library changed. Choose the command again.	“动作”库已更改，请重新选择命令。
+	The GPU compositor is still being prepared	GPU 合成器仍在准备中
+	The Record Again command changed.	“再次记录”命令已更改。
+	The action or insertion command changed. Request Insert Menu Item again.	动作或插入命令已更改，请重新请求“插入菜单项目”。
+	The actions changed. Request Record Again again.	动作已更改，请重新请求“再次记录”。
+	The actions changed. Request Replace Actions again.	动作已更改，请重新请求“替换动作”。
+	The adjustment target is missing or unavailable.	调整目标缺失或不可用。
+	The canvas is shown as sRGB. Choose a monitor profile in Edit › Color Settings.	画布当前按 sRGB 显示。可在 编辑 › 颜色设置 中选择显示器配置文件。
+	The canvas on {display} is shown as sRGB. Choose a monitor profile in Edit › Color Settings.	{display} 上的画布当前按 sRGB 显示。可在 编辑 › 颜色设置 中选择显示器配置文件。
+	The command permissions changed. Choose the command again.	命令权限已更改，请重新选择命令。
+	The command permissions changed. Request Insert Menu Item again.	命令权限已更改，请重新请求“插入菜单项目”。
+	The command permissions changed. Request Record Again again.	命令权限已更改，请重新请求“再次记录”。
+	The dialog names no action	该对话框未指定动作
+	The document changed. Open Count Group Name again.	文档已更改，请重新打开“计数组名称”。
+	The document changed. Please choose Clear All again.	文档已更改，请重新选择“全部清除”。
+	The document changed. Request Record Again again.	文档已更改，请重新请求“再次记录”。
+	The document or active layer changed. Open Fill again.	文档或当前图层已更改，请重新打开“填充”。
+	The document or active layer changed. Open Stroke again.	文档或当前图层已更改，请重新打开“描边”。
+	The document or its notes changed. Please delete the note again.	文档或其注释已更改，请重新删除注释。
+	The document or selected layers changed. Choose Duplicate Layer again.	文档或所选图层已更改，请重新选择“复制图层”。
+	The fill for this layer must be rasterized before proceeding. It will no longer be editable as a fill. Rasterize the fill?	继续操作前必须先栅格化此图层的填充内容，之后将无法作为填充进行编辑。确定要栅格化吗？
+	The keyboard shortcuts were not saved: {error}	键盘快捷键未保存：{error}
+	The preference could not be saved: {error}	无法保存首选项：{error}
+	This adjustment ({key}) is kept as imported and can't be edited yet.	此调整（{key}）按导入原样保留，暂不支持编辑。
+	This custom shape can't be added to a shape layer with a path operation: choose New Layer	无法通过路径操作将此自定形状添加到现有形状图层：请选择“新图层”
+	This session: {reason}	本次会话：{reason}
+	This shape can't be created	无法创建此形状
+	This shape layer must be rasterized before proceeding. It will no longer be editable as a shape. Rasterize the shape?	继续操作前必须先栅格化此形状图层，之后将无法作为形状进行编辑。确定要栅格化吗？
+	This smart object must be rasterized before proceeding. Edit Contents will no longer be available. Rasterize the smart object?	继续操作前必须先栅格化此智能对象，之后“编辑内容”将不可用。确定要栅格化吗？
+	This type layer must be rasterized before proceeding. Its text will no longer be editable. Rasterize the type?	继续操作前必须先栅格化此文字图层，之后其文字将无法编辑。确定要栅格化吗？
+	Tiles	瓷砖拼贴
+	Tilt-Shift	移轴模糊
+	Tip	笔尖
+	Toggle Layer Mask Overlay	切换图层蒙版叠加显示
+	Toggle the Brush Settings panel	切换“画笔设置”面板
+	Toggle visibility of count group	切换计数组的可见性
+	Tolerance for choosing related colors	选择相近颜色时的容差
+	Tool:	工具：
+	Torn Edges	撕边
+	Total Ink	总墨量
+	Trace Contour	描边轮廓
+	Transform Path	变换路径
+	Transport	播放控制
+	Trap	陷印
+	Trim	裁切
+	Trim Layers	修整图层
+	Twirl Clockwise	顺时针旋转扭曲
+	Twirl Counterclockwise	逆时针旋转扭曲
+	Type editor	文字编辑器
+	Type mask	文字蒙版
+	Type transform	文字变换
+	Underpainting	底纹效果
+	Underwater	水下
+	Update Layer Comp	更新图层复合
+	Use Open Documents	使用已打开的文档
+	Vanishing Point	消失点
+	Vertical:	垂直：
+	Vignette	暗角
+	Vignette Removal	暗角去除
+	Visible Layers Only	仅可见图层
+	Wait for the Actions library to load.	请等待“动作”库加载完成。
+	Waiting removals	待移除区域
+	Warming Filter (81)	加温滤镜 (81)
+	Warming Filter (85)	加温滤镜 (85)
+	Warming Filter (LBA)	加温滤镜 (LBA)
+	Warp Text	文字变形
+	Water Paper	水彩画纸
+	Watercolor	水彩
+	Web Color	Web 颜色
+	WebP	WebP
+	White Color	白色
+	Wind	风
+	Window renderer: {renderer}	窗口渲染器：{renderer}
+	You must save to at least one file type.	必须至少保存为一种文件类型。
+	ZigZag	水波
+	Zoom In (hold, drag to scrub)	放大（按住并拖动可连续缩放）
+	Zoom Out (hold)	缩小（按住）
+	auto	自动
+	blue	蓝色
+	blur tool	模糊工具
+	browser preset storage timed out	浏览器预设存储超时
+	brush tool	画笔工具
+	brushes	画笔
+	burn tool	加深工具
+	couldn't read the file	无法读取文件
+	dodge tool	减淡工具
+	fallback	回退
+	gradient tool	渐变工具
+	gradients	渐变
+	gray	灰色
+	green	绿色
+	it is a folder, not a file; drop the files inside it instead	这是一个文件夹而非文件；请拖放其中的文件
+	layer mask	图层蒙版
+	manual	手动
+	no destination document	没有目标文档
+	none	无
+	off	关
+	on	开
+	orange	橙色
+	previous reading kept; the last re-read failed: {reason}	已保留上次读取结果；最近一次重读失败：{reason}
+	red	红色
+	sRGB	sRGB
+	sharpen tool	锐化工具
+	shortcut	快捷键
+	smudge tool	涂抹工具
+	sponge tool	海绵工具
+	unknown	未知
+	unknown type	未知类型
+	vector mask	矢量蒙版
+	violet	紫色
+	yellow	黄色
+	{dpi} pixels/inch	{dpi} 像素/英寸
+	{index} of {total}	第 {index} 项，共 {total} 项
+	{label} is not available: {reason}	{label} 不可用：{reason}
+	{message} (notes: {n}; {warning})	{message}（备注：{n}；{warning}）
+	{message} into “{group}”	{message}，至“{group}”
+	{ok} written to {dir}	已将 {ok} 写入 {dir}
+@plural	Imported {n} brush from {file}|Imported {n} brushes from {file}	已从 {file} 导入 {n} 个画笔
+@plural	Imported {n} gradient from {file}|Imported {n} gradients from {file}	已从 {file} 导入 {n} 个渐变
+@plural	Imported {n} pattern from {file}|Imported {n} patterns from {file}	已从 {file} 导入 {n} 个图案
+@plural	The brush group “{group}” already has {n} brush of yours.|The brush group “{group}” already has {n} brushes of yours.	画笔组“{group}”中已有你的 {n} 个画笔。
+@plural	The gradient group “{group}” already exists ({n} gradient).|The gradient group “{group}” already exists ({n} gradients).	渐变组“{group}”已存在（共 {n} 个渐变）。
+@plural	{what}: {n} Image Assets output failed|{what}: {n} Image Assets outputs failed	{what}：{n} 个图像资源输出失败
+@plural	{what}: {n} file failed|{what}: {n} files failed	{what}：{n} 个文件失败
+smartSvg	Choose the application used to edit this SVG:	选择用于编辑此 SVG 的应用程序：
+smartSvg	Edit SVG Smart Object	编辑 SVG 智能对象
+smartSvg	Other application	其他应用程序
+smartSvg	PhotoCraft (internal editor)	PhotoCraft（内置编辑器）
+smartSvg	SVG editor opened. Save the SVG to update this Smart Object.	SVG 编辑器已打开。保存 SVG 即可更新此智能对象。
+smartSvg	Save to the opened SVG file. Each saved change becomes one undo step in PhotoCraft.	保存到已打开的 SVG 文件。每次保存更改都将成为 PhotoCraft 中的一个撤销步骤。
+smartSvg	Stop syncing this Smart Object	停止同步此智能对象
+smartSvg	Updates wait while another document or an editing dialog is active.	当其他文档或编辑对话框处于活动状态时，更新将暂缓。

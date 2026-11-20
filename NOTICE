@@ -36,7 +36,7 @@ are adapted from SpektraLab (https://github.com/JamesQiu2005/SpektraLab), Copyri
 licensed under GPL-3.0-or-later.
 
 This combined build is therefore distributed under GPL-3.0-or-later; see
-packaging/spektra/GPL-COMPLIANCE.md and packaging/spektra/KNOWN-LIMITATIONS.md.
+LICENSE-GPLv3, packaging/spektra/GPL-COMPLIANCE.md and packaging/spektra/KNOWN-LIMITATIONS.md.
 
 Linux and FreeBSD Wayland window decorations
 -------------------------------------------

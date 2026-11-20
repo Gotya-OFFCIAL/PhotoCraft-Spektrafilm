@@ -4,8 +4,13 @@
 //! RGB histogram; `RightRail`: Latitude plot, Camera Exposure EV, DIR Couplers, Durst Dichroic
 //! Enlarger C/M/Y Color Head filtration, and Spectral/CAM16-UCS Gamut Compression).
 
-use std::sync::Arc;
-
+use craft::settings::Remembered;
+use craft::ui::choice::Checkbox;
+use craft::ui::contract::{Bind, Props as _, SaveKey, Show as _, ShowContainer as _};
+use craft::ui::dialog::{Dialog, DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
+use craft::ui::patterns::form_dialogs::{Param, ParamKind};
+use craft::ui::runtime::env::Label;
+use craft::ui::sections::{DialogRole, FooterButton};
 use egui::{Align2, Color32, CornerRadius, Id, Rect, RichText, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, Ui, Vec2, pos2, vec2};
 use photocraft_codecs::{ChannelLayout, SampleType};
 use photocraft_doc::Document;
@@ -18,6 +23,8 @@ use crate::theme;
 pub const COMMAND: &str = "filter.spektra.filmSim";
 pub const DEFAULT_SIZE: Vec2 = vec2(1120.0, 700.0);
 pub const MIN_SIZE: Vec2 = vec2(860.0, 540.0);
+const REMEMBER_SCOPE: &str = "photocraft.filter.spektra.filmSim";
+const WINDOW_SAVE_SCOPE: &str = "photocraft.filter.spektra.filmSim.window";
 
 // Private UI state fields stored in dialog `fields` (stripped from engine params by `params_of`
 // because they start with `__`).
@@ -560,35 +567,427 @@ fn compute_scope_stats(doc: &Document) -> ScopeStats {
     out
 }
 
-#[derive(Clone, PartialEq)]
-enum TexKey {
-    Filtered(FilterPreviewKey),
-    Original(photocraft_doc::DocId, u64, u32),
-}
-
 #[derive(Clone)]
 struct CachedTex {
-    key: TexKey,
     tex: TextureHandle,
     size: [u32; 2],
     stats: ScopeStats,
 }
 
 #[derive(Default, Clone)]
-struct PreviewCache {
-    original: Option<CachedTex>,
-    filtered: Option<CachedTex>,
-    view: Option<(photocraft_engine::channel_cmds::ChannelView, bool, Option<photocraft_doc::LayerId>)>,
+struct FedPreview {
+    orig: Option<CachedTex>,
+    filt: Option<CachedTex>,
+    base_k: u32,
+}
+
+#[derive(Clone, PartialEq)]
+enum TexKey {
+    Filtered(FilterPreviewKey),
+    Original(photocraft_doc::DocId, u64, u32),
+}
+
+/// Answer produced when the user confirms [`SpektraDialog`].
+#[derive(Clone, Debug)]
+pub struct SpektraAnswer {
+    id: DialogId,
+    fields: Map<String, Value>,
+    captured: Value,
+}
+
+/// Hosted 3-column darkroom dialog for `filter.spektra.filmSim`.
+pub struct SpektraDialog {
+    id: DialogId,
+    fields: Map<String, Value>,
+    captured: Value,
+    fed: FedPreview,
+    view_sig: Option<(photocraft_engine::channel_cmds::ChannelView, bool, Option<photocraft_doc::LayerId>)>,
+    orig_key: Option<TexKey>,
+    filt_key: Option<TexKey>,
+}
+
+impl SpektraDialog {
+    fn new(fields: Map<String, Value>, captured: Value) -> Self {
+        Self {
+            id: dialog_id(COMMAND),
+            fields,
+            captured,
+            fed: FedPreview { base_k: 1, ..Default::default() },
+            view_sig: None,
+            orig_key: None,
+            filt_key: None,
+        }
+    }
+
+    /// Expose fields for unit tests and inspection.
+    pub fn fields(&self) -> &Map<String, Value> {
+        &self.fields
+    }
+
+    /// Mutable access to fields for unit tests.
+    pub fn fields_mut(&mut self) -> &mut Map<String, Value> {
+        &mut self.fields
+    }
+}
+
+impl StackDialog for SpektraDialog {
+    type Result = SpektraAnswer;
+
+    fn id(&self) -> DialogId {
+        self.id
+    }
+
+    fn key(&self) -> Option<&str> {
+        Some(COMMAND)
+    }
+
+    fn show(&mut self, ui: &mut Ui, _stack: &DialogStack) -> Option<DialogResult<SpektraAnswer>> {
+        let SpektraDialog { id, fields, captured, fed, .. } = self;
+        let mut preview = fields.get("__preview").and_then(Value::as_bool).unwrap_or(true);
+        let shown = Dialog::new(Label::from(tl!("Film Simulation").to_string()))
+            .overlay(|overlay| overlay.resizable(true).size(DEFAULT_SIZE).min_size(MIN_SIZE))
+            .remember(SaveKey::named(WINDOW_SAVE_SCOPE))
+            .close_on_enter(true)
+            .buttons([
+                FooterButton::new(Label::from(tl!("Cancel").to_string()), DialogRole::Cancel),
+                FooterButton::new(Label::from(tl!("OK").to_string()), DialogRole::Accept),
+            ])
+            .footer(|ui, _| {
+                Checkbox::new(Bind::bound(&mut preview)).label(Label::from(tl!("Preview").to_string())).show(ui);
+            })
+            .show(ui, |ui, _| {
+                render_body(fed, ui, fields);
+            });
+        fields.insert("__preview".into(), json!(preview));
+        shown.result(|| SpektraAnswer { id: *id, fields: fields.clone(), captured: captured.clone() })
+    }
+
+    fn confirm(&mut self, _ctx: &egui::Context) -> Option<SpektraAnswer> {
+        Some(SpektraAnswer { id: self.id, fields: self.fields.clone(), captured: self.captured.clone() })
+    }
+
+    fn json_fields(&self) -> Option<Value> {
+        Some(crate::filter_dialog::params_of(&self.fields))
+    }
+
+    fn set_json_field(&mut self, ctx: &egui::Context, field: &str, value: Value) -> Result<(), String> {
+        if field == "preview" || field == "__preview" {
+            let on = value.as_bool().ok_or_else(|| format!("`{field}` must be a boolean"))?;
+            self.fields.insert("__preview".into(), json!(on));
+            ctx.request_repaint();
+            return Ok(());
+        }
+        let Some(spec) = photocraft_engine::commands::find(COMMAND) else {
+            return Err(format!("{COMMAND} is unavailable"));
+        };
+        let params = Param::parse_list(spec.params);
+        let Some(param) = params.iter().find(|p| p.key == field) else {
+            return Err(format!("the Film Simulation dialog has no field `{field}`"));
+        };
+        let normalized = validate_param_json(param, &value).ok_or_else(|| format!("`{field}` is not valid: {value}"))?;
+        self.fields.insert(field.to_owned(), normalized);
+        ctx.request_repaint();
+        Ok(())
+    }
+}
+
+fn defaults_from_params(params: &[Param]) -> Map<String, Value> {
+    let mut fields = Map::new();
+    for p in params {
+        let val = match &p.kind {
+            ParamKind::Bool { default, .. } => json!(default),
+            ParamKind::Int { default, .. } => json!(default),
+            ParamKind::Range { default, .. } | ParamKind::Number { default, .. } | ParamKind::Angle { default, .. } => json!(default),
+            ParamKind::Choice { options, default, .. } | ParamKind::Radio { options, default, .. } => {
+                let initial = default.as_deref().or_else(|| options.first().map(|(id, _)| id.as_str())).unwrap_or_default();
+                json!(initial)
+            }
+            ParamKind::Text { default, .. } => json!(default),
+            _ => continue,
+        };
+        fields.insert(p.key.clone(), val);
+    }
+    fields.entry("printChain".to_owned()).or_insert_with(|| json!(true));
+    fields
+}
+
+fn validate_param_json(param: &Param, value: &Value) -> Option<Value> {
+    match &param.kind {
+        ParamKind::Bool { .. } => value.as_bool().map(|v| json!(v)),
+        ParamKind::Int { min, max, .. } => {
+            let n = value.as_i64()?;
+            if min.is_some_and(|lo| n < lo) || max.is_some_and(|hi| n > hi) {
+                return None;
+            }
+            Some(json!(n))
+        }
+        ParamKind::Range { min, max, .. } => {
+            let n = value.as_f64().filter(|x| x.is_finite())?;
+            if n < *min || n > *max {
+                return None;
+            }
+            Some(json!(n))
+        }
+        ParamKind::Number { min, max, .. } => {
+            let n = value.as_f64().filter(|x| x.is_finite())?;
+            if min.is_some_and(|lo| n < lo) || max.is_some_and(|hi| n > hi) {
+                return None;
+            }
+            Some(json!(n))
+        }
+        ParamKind::Choice { options, .. } | ParamKind::Radio { options, .. } => {
+            let s = value.as_str()?;
+            options.iter().any(|(id, _)| id == s).then(|| json!(s))
+        }
+        ParamKind::Text { .. } => value.as_str().map(|s| json!(s)),
+        _ => None,
+    }
+}
+
+/// Opens the SpektraFilm Darkroom Studio dialog (`filter.spektra.filmSim`).
+/// Remembers film/look parameters while keeping `printChain` pinned to `true` (`paper print chain`).
+pub fn open(app: &mut PhotocraftApp) -> Result<DialogId, String> {
+    let spec = photocraft_engine::commands::find(COMMAND).ok_or_else(|| format!("{COMMAND} has no dialog"))?;
+    let params = Param::parse_list(spec.params);
+    let mut fields = defaults_from_params(&params);
+    if let Some(saved) = Remembered::<toml::Table>::new(REMEMBER_SCOPE).recall(app.framework.host()) {
+        for (key, value) in saved {
+            // `printChain` is a pipeline-mode switch, never restored as false on reopen.
+            if key == "printChain" {
+                continue;
+            }
+            let Some(param) = params.iter().find(|p| p.key == key) else { continue };
+            if let Ok(json_val) = serde_json::to_value(value)
+                && let Some(valid) = validate_param_json(param, &json_val)
+            {
+                fields.insert(key, valid);
+            }
+        }
+    }
+    fields.insert("__command".into(), json!(COMMAND));
+    fields.insert("__preview".into(), json!(true));
+    app.filter_preview = None;
+    Ok(app.framework.dialogs.open(SpektraDialog::new(fields, Value::Null)))
+}
+
+/// Opens the SpektraFilm studio to edit an existing Smart Filter (`recorded` overlaid over schema defaults).
+pub fn open_smart_filter(app: &mut PhotocraftApp, recorded: &Value, target: Value) -> Result<DialogId, String> {
+    let spec = photocraft_engine::commands::find(COMMAND).ok_or_else(|| format!("{COMMAND} has no dialog"))?;
+    let params = Param::parse_list(spec.params);
+    let mut fields = defaults_from_params(&params);
+    if let Some(obj) = recorded.as_object() {
+        for (key, value) in obj {
+            if let Some(param) = params.iter().find(|p| p.key == *key) {
+                if let Some(valid) = validate_param_json(param, value) {
+                    fields.insert(key.clone(), valid);
+                }
+            } else if !key.starts_with("__") {
+                fields.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    fields.insert("__command".into(), json!(COMMAND));
+    fields.insert("__preview".into(), json!(true));
+    app.filter_preview = None;
+    Ok(app.framework.dialogs.open(SpektraDialog::new(fields, target)))
+}
+
+/// Live-preview request for `canvas::ensure_filter_preview` while `SpektraDialog` is open with preview on.
+pub(crate) fn preview_request(app: &PhotocraftApp) -> Option<(DialogId, String, Value)> {
+    let dialog = app.framework.dialogs.get::<SpektraDialog>()?;
+    if !dialog.fields.get("__preview").and_then(Value::as_bool).unwrap_or(true) {
+        return None;
+    }
+    let params = crate::filter_dialog::params_of(&dialog.fields);
+    if crate::smart_filter_dialog::is_target(&dialog.captured) {
+        let (cmd, params) = crate::smart_filter_dialog::params_command(app, &dialog.captured, COMMAND, params).ok()?;
+        Some((dialog.id, cmd, params))
+    } else {
+        Some((dialog.id, COMMAND.to_owned(), app.with_mask_target(COMMAND, params)))
+    }
+}
+
+/// Whether `SpektraDialog` currently keeps a live filter preview alive.
+pub(crate) fn is_previewing(app: &PhotocraftApp) -> bool {
+    preview_request(app).is_some()
+}
+
+/// Uploads/refreshes proxy & filtered preview textures + scopes for an open `SpektraDialog`.
+pub(crate) fn feed(app: &mut PhotocraftApp, ctx: &egui::Context) {
+    let Some((id, preview_on, captured)) = app
+        .framework
+        .dialogs
+        .get::<SpektraDialog>()
+        .map(|d| (d.id, d.fields.get("__preview").and_then(Value::as_bool).unwrap_or(true), d.captured.clone()))
+    else {
+        return;
+    };
+    if preview_on && let Some(idx) = app.session.active_index() {
+        crate::canvas::filter_preview::ensure_filter_preview(app, idx, ctx);
+    }
+    let Some(st) = app.session.active() else { return };
+    let (doc_id, revision) = (st.doc.id, st.revision);
+    let view_sig = (st.channel_view.clone(), app.session.prefs().interface.show_channels_in_color, st.active_layer);
+    let previewed = crate::smart_ui::preview_command(COMMAND, COMMAND, &captured);
+    let filtered = app.filter_preview.as_ref().and_then(|p| {
+        (preview_on && p.key.dialog == id && p.key.doc == doc_id && p.key.command == previewed)
+            .then(|| p.result.clone().map(|r| (p.key.clone(), r)))
+            .flatten()
+    });
+    let base_k = filtered
+        .as_ref()
+        .map(|(k, _)| k.k)
+        .unwrap_or_else(|| {
+            let params = preview_request(app).map(|(_, _, p)| p).unwrap_or_else(|| json!({}));
+            crate::canvas::filter_preview_factor(app, &st.doc, COMMAND, &params)
+        });
+    let orig_key = TexKey::Original(doc_id, revision, base_k);
+    let filt_key = filtered.as_ref().map(|(k, _)| TexKey::Filtered(k.clone()));
+
+    let (need_orig, need_filt) = {
+        let Some(d) = app.framework.dialogs.get::<SpektraDialog>() else { return };
+        let view_changed = d.view_sig.as_ref() != Some(&view_sig);
+        (view_changed || d.orig_key.as_ref() != Some(&orig_key), view_changed || d.filt_key != filt_key)
+    };
+    let next_orig = if need_orig {
+        let proxy = crate::proxy::proxy_document(&st.doc, base_k);
+        let stats = compute_scope_stats(&proxy);
+        let tex = crate::filter_preview_ui::upload(ctx, app, "spektra-preview-orig", &proxy);
+        Some(CachedTex { tex, size: [proxy.size.width, proxy.size.height], stats })
+    } else {
+        None
+    };
+    let next_filt = if need_filt {
+        filtered.as_ref().map(|(_, filtered_doc)| {
+            let stats = compute_scope_stats(filtered_doc);
+            let tex = crate::filter_preview_ui::upload(ctx, app, "spektra-preview-filt", filtered_doc);
+            CachedTex { tex, size: [filtered_doc.size.width, filtered_doc.size.height], stats }
+        })
+    } else {
+        None
+    };
+
+    if let Some(d) = app.framework.dialogs.get_mut::<SpektraDialog>() {
+        if d.view_sig.as_ref() != Some(&view_sig) {
+            d.orig_key = None;
+            d.filt_key = None;
+            d.fed.orig = None;
+            d.fed.filt = None;
+            d.view_sig = Some(view_sig);
+        }
+        d.fed.base_k = base_k;
+        if let Some(tex) = next_orig {
+            d.orig_key = Some(orig_key);
+            d.fed.orig = Some(tex);
+        }
+        if need_filt {
+            d.filt_key = filt_key;
+            d.fed.filt = next_filt;
+        }
+    }
+}
+
+/// Processes confirmed or cancelled [`SpektraDialog`] results (`TAKERS` entry).
+pub(crate) fn take(app: &mut PhotocraftApp, _ctx: &egui::Context) {
+    let Some(result) = app.framework.dialogs.take::<SpektraDialog>() else { return };
+    match result {
+        DialogResult::Ok(ans) => {
+            let params = crate::filter_dialog::params_of(&ans.fields);
+            if crate::actions::record_again::owns_dialog(app, ans.id) {
+                if let Err(e) = crate::actions::record_again::confirm(app, ans.id, COMMAND, params) {
+                    crate::notices::error(app, e);
+                }
+                return;
+            }
+            let token = crate::actions::token_of(app, ans.id);
+            let abandon = |app: &mut PhotocraftApp, token: Option<u64>| {
+                if let Some(t) = token {
+                    crate::actions::abandoned(app, t);
+                }
+            };
+            if let Err(error) = crate::actions::authorize_panel_preview(app, ans.id, COMMAND, &params) {
+                app.filter_preview = None;
+                abandon(app, token);
+                crate::notices::error(app, error);
+                return;
+            }
+            let (cmd, final_params) = match crate::smart_ui::confirm_command(app, &ans.captured, COMMAND.to_owned(), params) {
+                Ok(edit) => edit,
+                Err(error) => {
+                    app.filter_preview = None;
+                    abandon(app, token);
+                    crate::notices::error(app, error);
+                    return;
+                }
+            };
+            let outcome = crate::actions::run_step_dialog(app, ans.id, &cmd, final_params);
+            let running = app
+                .session
+                .active()
+                .is_some_and(|st| app.filter_preview.as_ref().is_some_and(|p| p.key.doc == st.doc.id) && app.session.job_on(st.doc.id).is_some());
+            match app.filter_preview.as_mut() {
+                Some(p) if outcome.is_ok() && running => p.committing = true,
+                _ => app.filter_preview = None,
+            }
+            if outcome.is_ok() {
+                if !crate::smart_filter_dialog::is_target(&ans.captured) {
+                    let mut table = toml::Table::new();
+                    for (k, v) in &ans.fields {
+                        if k.starts_with("__") || k == "printChain" {
+                            continue;
+                        }
+                        if let Ok(tv) = toml::Value::try_from(v.clone()) {
+                            table.insert(k.clone(), tv);
+                        }
+                    }
+                    if !table.is_empty() {
+                        Remembered::<toml::Table>::new(REMEMBER_SCOPE).store(app.framework.host(), &table);
+                    }
+                }
+                if let Some(t) = token
+                    && let Err(e) = crate::actions::resume(app, t)
+                {
+                    crate::notices::error(app, e);
+                }
+            } else if let Err(error) = outcome {
+                abandon(app, token);
+                crate::notices::error(app, error);
+            }
+        }
+        DialogResult::Cancel | _ => {
+            if let Some(t) = crate::actions::token_of(app, dialog_id(COMMAND)) {
+                crate::actions::abandoned(app, t);
+            }
+            app.filter_preview = None;
+        }
+    }
+}
+
+fn draw_checker(painter: &egui::Painter, rect: Rect, tile: f32) {
+    let dark = Color32::from_gray(42);
+    let light = Color32::from_gray(52);
+    painter.rect_filled(rect, CornerRadius::ZERO, dark);
+    let cols = (rect.width() / tile).ceil() as usize;
+    let rows = (rect.height() / tile).ceil() as usize;
+    for r in 0..rows {
+        for c in 0..cols {
+            if (r + c) % 2 == 1 {
+                let min = pos2(rect.left() + c as f32 * tile, rect.top() + r as f32 * tile);
+                let max = pos2((min.x + tile).min(rect.right()), (min.y + tile).min(rect.bottom()));
+                painter.rect_filled(Rect::from_min_max(min, max), CornerRadius::ZERO, light);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Main 3-Column Darkroom Studio Body
 // ---------------------------------------------------------------------------
 
-pub fn body(app: &mut PhotocraftApp, dialog_id: u64, ui: &mut Ui, f: &mut Map<String, Value>) {
+fn render_body(fed: &FedPreview, ui: &mut Ui, f: &mut Map<String, Value>) {
     // Paint darkroom card background behind the whole 3-column studio area.
     let avail = ui.available_size();
-    let total_h = (avail.y - 44.0).max(400.0);
+    let total_h = avail.y.max(460.0);
     let total_w = avail.x.max(780.0);
 
     let (outer_rect, _) = ui.allocate_exact_size(vec2(total_w, total_h), Sense::hover());
@@ -623,7 +1022,7 @@ pub fn body(app: &mut PhotocraftApp, dialog_id: u64, ui: &mut Ui, f: &mut Map<St
     draw_left_rail(&mut left_ui, f);
 
     // Prepare preview textures & scope stats
-    let stats = draw_center_canvas(app, dialog_id, ui, center_rect, f);
+    let stats = draw_center_canvas(fed, ui, center_rect, f);
 
     let mut right_ui = ui.new_child(egui::UiBuilder::new().max_rect(right_rect));
     draw_right_rail(&mut right_ui, f, &stats);
@@ -1024,7 +1423,7 @@ fn draw_direct_scan_row(ui: &mut Ui, selected: bool, is_positive: bool) -> bool 
 // Center Darkroom Canvas (Viewfinder · Split Compare · Corner RGB Histogram)
 // ---------------------------------------------------------------------------
 
-fn draw_center_canvas(app: &PhotocraftApp, dialog_id: u64, ui: &mut Ui, center_rect: Rect, f: &mut Map<String, Value>) -> ScopeStats {
+fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut Map<String, Value>) -> ScopeStats {
     let footer_h = 28.0;
     let canvas_rect = Rect::from_min_max(center_rect.min, pos2(center_rect.right(), (center_rect.bottom() - footer_h).max(center_rect.top() + 80.0)));
     let footer_rect = Rect::from_min_max(pos2(center_rect.left(), canvas_rect.bottom()), center_rect.max);
@@ -1066,53 +1465,9 @@ fn draw_center_canvas(app: &PhotocraftApp, dialog_id: u64, ui: &mut Ui, center_r
         SpkColors::SECONDARY,
     );
 
-    let Some(idx) = app.session.active_index() else { return ScopeStats::default() };
-    let Some(st) = app.session.documents().get(idx) else { return ScopeStats::default() };
-    let (doc_id, revision) = (st.doc.id, st.revision);
-    let Some(cmd) = f.get("__command").and_then(Value::as_str).map(str::to_owned) else { return ScopeStats::default() };
-
-    let preview_on = f.get("__preview").and_then(Value::as_bool).unwrap_or(true);
-    let filtered: Option<(FilterPreviewKey, Arc<Document>)> = app.filter_preview.as_ref().and_then(|p| {
-        let previewed = crate::smart_ui::preview_command(f, &cmd);
-        (preview_on && p.key.dialog == dialog_id && p.key.doc == doc_id && p.key.command == previewed)
-            .then(|| p.result.clone().map(|r| (p.key.clone(), r)))
-            .flatten()
-    });
-
-    let base_k = filtered.as_ref().map(|(k, _)| k.k).unwrap_or_else(|| {
-        let params = app.with_mask_target(&cmd, crate::filter_dialog::params_of(f));
-        crate::canvas::filter_preview_factor(app, &st.doc, &cmd, &params)
-    });
-
-    let cache_id = Id::unique(("spektra-preview-cache", dialog_id));
-    let mut cache: PreviewCache = ui.ctx().data_mut(|d| std::mem::take(d.get_temp_mut_or_default::<PreviewCache>(cache_id)));
-    let view_sig = (st.channel_view.clone(), app.session.prefs().interface.show_channels_in_color, st.active_layer);
-    if cache.view.as_ref() != Some(&view_sig) {
-        cache = PreviewCache { view: Some(view_sig), ..Default::default() };
-    }
-
-    let orig_key = TexKey::Original(doc_id, revision, base_k);
-    if cache.original.as_ref().map(|c| &c.key) != Some(&orig_key) {
-        let proxy = crate::proxy::proxy_document(&st.doc, base_k);
-        let stats = compute_scope_stats(&proxy);
-        let tex = crate::filter_preview_ui::upload(ui.ctx(), app, "spektra-preview-orig", &proxy);
-        cache.original = Some(CachedTex { key: orig_key, tex, size: [proxy.size.width, proxy.size.height], stats });
-    }
-    match &filtered {
-        Some((key, filtered_doc)) => {
-            let fkey = TexKey::Filtered(key.clone());
-            if cache.filtered.as_ref().map(|c| &c.key) != Some(&fkey) {
-                let stats = compute_scope_stats(filtered_doc);
-                let tex = crate::filter_preview_ui::upload(ui.ctx(), app, "spektra-preview-filt", filtered_doc);
-                cache.filtered = Some(CachedTex { key: fkey, tex, size: [filtered_doc.size.width, filtered_doc.size.height], stats });
-            }
-        }
-        None => cache.filtered = None,
-    }
-
-    let orig = cache.original.clone();
-    let filt = cache.filtered.clone();
-    ui.ctx().data_mut(|d| d.insert_temp(cache_id, cache));
+    let base_k = fed.base_k.max(1);
+    let orig = fed.orig.clone();
+    let filt = fed.filt.clone();
 
     let active_stats = filt.as_ref().or(orig.as_ref()).map(|c| c.stats.clone()).unwrap_or_default();
     let Some([img_w, img_h]) = filt.as_ref().map(|c| c.size).or_else(|| orig.as_ref().map(|c| c.size)) else {
@@ -1122,8 +1477,8 @@ fn draw_center_canvas(app: &PhotocraftApp, dialog_id: u64, ui: &mut Ui, center_r
         return active_stats;
     }
 
-    let doc_w = (img_w as f32 * base_k.max(1) as f32).max(1.0);
-    let doc_h = (img_h as f32 * base_k.max(1) as f32).max(1.0);
+    let doc_w = (img_w as f32 * base_k as f32).max(1.0);
+    let doc_h = (img_h as f32 * base_k as f32).max(1.0);
 
     let fit = f.get(FIT_FIELD).and_then(Value::as_bool).unwrap_or(true);
     let pad = 20.0;
@@ -1161,7 +1516,7 @@ fn draw_center_canvas(app: &PhotocraftApp, dialog_id: u64, ui: &mut Ui, center_r
     let painter = ui.painter_at(canvas_rect);
     // Subtle dark drop frame around the image
     painter.rect_filled(dest.expand(2.0), CornerRadius::same(2), SpkColors::WELL);
-    crate::widgets::checker(&painter, dest, 8.0);
+    draw_checker(&painter, dest, 8.0);
 
     let mode = f.get(VIEW_MODE_FIELD).and_then(Value::as_str).unwrap_or("process").to_string();
     let mut split_pos = f.get(SPLIT_POS_FIELD).and_then(Value::as_f64).map(|v| v as f32).unwrap_or(0.5).clamp(0.05, 0.95);
@@ -1794,6 +2149,7 @@ fn scrub_slider_row(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::framework::BuildApp;
     use egui_kittest::kittest::Queryable;
 
     #[test]
@@ -1807,16 +2163,16 @@ mod tests {
             }
         }
         let spec = photocraft_engine::commands::find(COMMAND).expect("filmSim command exists");
-        for param in crate::filter_dialog::parse_spec(spec.params) {
-            if let crate::filter_dialog::Kind::Choice { options, .. } = param.kind {
+        for param in Param::parse_list(spec.params) {
+            if let ParamKind::Choice { options, .. } = param.kind {
                 if param.key == "film" {
                     assert_eq!(options.len(), FILM_STOCKS.len());
-                    for opt in &options {
+                    for (opt, _) in &options {
                         assert!(FILM_STOCKS.iter().any(|s| s.id == opt), "film catalog missing {opt}");
                     }
                 } else if param.key == "paper" {
                     assert_eq!(options.len(), PAPER_STOCKS.len());
-                    for opt in &options {
+                    for (opt, _) in &options {
                         assert!(PAPER_STOCKS.iter().any(|p| p.id == opt), "paper catalog missing {opt}");
                     }
                 }
@@ -1828,45 +2184,41 @@ mod tests {
     fn studio_dialog_renders_auto_pairs_paper_and_resets_params() {
         let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({"width": 32, "height": 24})).unwrap();
-        let id = crate::dialogs::open_command_dialog(&mut app, COMMAND, "Film Simulation…");
+        let id = crate::dialogs::open_command_dialog(&mut app, COMMAND, "Film Simulation…").unwrap();
         {
-            let d = app.ui.dialog_mut(id).unwrap();
-            assert!(owns(&d.fields));
-            assert_eq!(d.fields.get("printChain").and_then(Value::as_bool), Some(true));
+            let d = app.framework.dialogs.get_by_id::<SpektraDialog>(id).unwrap();
+            assert!(owns(d.fields()));
+            assert_eq!(d.fields().get("printChain").and_then(Value::as_bool), Some(true));
         }
 
-        let mut h = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(vec2(1280.0, 820.0)).build_ui_state(
-            |ui, app: &mut PhotocraftApp| {
-                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("semibold".into()))) {
-                    return;
-                }
-                crate::dialogs::show(app, ui.ctx());
+        let mut h = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(vec2(1280.0, 820.0)).build_app(
+            |ui, app| {
+                crate::dialogs::run(app, ui);
             },
             app,
         );
-        PhotocraftApp::setup_context(&h.ctx, Default::default());
         h.run_steps(5);
 
         // Clicking Fujifilm Pro 400H should select it and auto-pair Fujifilm Crystal Archive Type II.
         h.get_by_label("Fujifilm Pro 400H").click();
         h.run_steps(3);
         {
-            let d = h.state_mut().ui.dialog_mut(id).unwrap();
-            assert_eq!(d.fields.get("film").and_then(Value::as_str), Some("fujifilm_pro_400h"));
-            assert_eq!(d.fields.get("paper").and_then(Value::as_str), Some("fujifilm_crystal_archive_typeii"));
-            d.fields.insert("ev".into(), json!(1.5));
-            d.fields.insert("couplers".into(), json!(true));
-            d.fields.insert("ccYellow".into(), json!(12.0));
+            let d = h.state_mut().framework.dialogs.get_mut_by_id::<SpektraDialog>(id).unwrap();
+            assert_eq!(d.fields().get("film").and_then(Value::as_str), Some("fujifilm_pro_400h"));
+            assert_eq!(d.fields().get("paper").and_then(Value::as_str), Some("fujifilm_crystal_archive_typeii"));
+            d.fields_mut().insert("ev".into(), json!(1.5));
+            d.fields_mut().insert("couplers".into(), json!(true));
+            d.fields_mut().insert("ccYellow".into(), json!(12.0));
         }
         h.run_steps(2);
 
         // Reset button should restore extended params while preserving selected film/paper.
         h.get_by_label("重置参数 ↺").click();
         h.run_steps(2);
-        let d = h.state_mut().ui.dialog_mut(id).unwrap();
-        assert_eq!(d.fields.get("film").and_then(Value::as_str), Some("fujifilm_pro_400h"));
-        assert_eq!(d.fields.get("ev").and_then(Value::as_f64), Some(0.0));
-        assert_eq!(d.fields.get("couplers").and_then(Value::as_bool), Some(false));
-        assert_eq!(d.fields.get("ccYellow").and_then(Value::as_f64), Some(0.0));
+        let d = h.state().framework.dialogs.get_by_id::<SpektraDialog>(id).unwrap();
+        assert_eq!(d.fields().get("film").and_then(Value::as_str), Some("fujifilm_pro_400h"));
+        assert_eq!(d.fields().get("ev").and_then(Value::as_f64), Some(0.0));
+        assert_eq!(d.fields().get("couplers").and_then(Value::as_bool), Some(false));
+        assert_eq!(d.fields().get("ccYellow").and_then(Value::as_f64), Some(0.0));
     }
 }

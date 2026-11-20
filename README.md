@@ -26,14 +26,18 @@
 ## 从源码构建 / Building from Source
 
 ```bash
-# 1. 准备 craft-i18n 并应用简体中文补丁（可选但推荐，构建完整多语言界面）
+# 1. 准备 craft-i18n 与 craft-fonts（嵌入全套多语言界面与 CJK/Unicode 字体）
 git clone https://github.com/storytold/craft-i18n.git ../craft-i18n
 git -C ../craft-i18n checkout 6ccdd32c58ccbe6f278ff3e534be003b1689805b
 # 将 packaging/spektra/i18n/zh-hans-photocraft-additions.tsv 中的译文合并至 ../craft-i18n/locales/zh-hans/photocraft.tsv
 # （并移除注释头列出的 13 条英文自覆盖行）
 
+git clone https://github.com/storytold/craft-fonts.git ../craft-fonts
+git -C ../craft-fonts checkout cc9269cd8d8258785dac603fba3122e5d2556795
+
 # 2. 编译 Release 二进制（GUI + CLI）
 CRAFT_I18N_DIR="$(realpath ../craft-i18n)" CRAFT_I18N_REQUIRED=1 \
+  CRAFT_FONTS_DIR="$(realpath ../craft-fonts)" CRAFT_FONTS_REQUIRED=1 \
   cargo build --release --bin photocraft --bin photocraft-cli
 
 # 3. 便携部署目录示例

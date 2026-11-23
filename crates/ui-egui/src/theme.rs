@@ -1169,29 +1169,29 @@ const SPEKTRA_THEME_JSON: &str = r##"{
     "accent.border": "#e1a95f8c",
     "accent.soft": "#e1a95f2e",
     "accent.solid": "#e1a95f",
-    "accent.strong": "#f6f4ef",
+    "accent.strong": "#e1a95f",
     "accent.text": "#ebb975",
     "caption.close_hover": "#c42b1c",
     "caption.close_text": "#ffffff",
-    "data.scope": "#191a19",
-    "line.border": "#383937",
-    "line.control_edge": "#474845",
-    "line.divider": "#323331",
-    "state.hover": "#383836",
-    "state.pressed": "#464643",
+    "data.scope": "#1e1f1e",
+    "line.border": "#3a3b39",
+    "line.control_edge": "#4a4b49",
+    "line.divider": "#343533",
+    "state.hover": "#3b3b3a",
+    "state.pressed": "#4a4a48",
     "state.selected": "{accent.soft}",
     "state.selected_hover": "{accent.soft}",
     "status.bad.fg": "#ee6b66",
     "status.warn.fg": "#f0be5a",
-    "surface.background": "#181817",
-    "surface.canvas": "#161615",
-    "surface.canvas_pattern": "#2c2c2a",
-    "surface.chrome": "#212120",
-    "surface.panel": "#2a2a29",
+    "surface.background": "#20201f",
+    "surface.canvas": "#1a1a19",
+    "surface.canvas_pattern": "#30302e",
+    "surface.chrome": "#262625",
+    "surface.panel": "#2d2d2c",
     "surface.shadow": "#00000099",
-    "surface.sunken": "#1d1e1d",
-    "text.muted": "#bab7b0",
-    "text.normal": "#f6f4ef",
+    "surface.sunken": "#1e1f1e",
+    "text.muted": "#c8c5be",
+    "text.normal": "#f9f7f3",
     "text.on_accent": "#141210",
     "text.on_strong": "#141210"
   }
@@ -1205,35 +1205,44 @@ pub(crate) fn spektra_theme_def() -> Option<Arc<ThemeDef>> {
     DEF.clone()
 }
 
-/// Override dark-mode theme tokens with SpektraLab's warm darkroom palette when running under the Spektra brand.
-fn apply_spektra_override(mut t: Tokens) -> Tokens {
-    if crate::panels::brand::is_spektra() && t.dark() {
-        // Aligned pixel-for-pixel with `SPEKTRA_THEME_JSON`.
-        t.chrome = Color32::from_rgb(33, 33, 32);
-        t.dock = Color32::from_rgb(29, 30, 29);
-        t.card = Color32::from_rgb(42, 42, 41);
-        t.card_border = Color32::from_rgb(56, 57, 55);
-        t.canvas = Color32::from_rgb(22, 22, 21);
-        t.field = Color32::from_rgb(29, 30, 29);
-        t.field_border = Color32::from_rgb(71, 72, 69);
-        t.hover = Color32::from_rgb(56, 56, 54);
-        t.pressed = Color32::from_rgb(70, 70, 67);
-        t.text = Color32::from_rgb(246, 244, 239);
-        t.text_dim = Color32::from_rgb(186, 183, 176);
-        t.text_faint = Color32::from_rgb(127, 125, 119);
+/// Apply SpektraLab's warm darkroom colors to any dark [`Tokens`] instance.
+pub(crate) fn spektra_tokens(mut t: Tokens) -> Tokens {
+    if t.dark() {
+        // Aligned pixel-for-pixel with `SPEKTRA_THEME_JSON` and the signature SpektraLab warm darkroom palette.
+        t.chrome = Color32::from_rgb(38, 38, 37);
+        t.dock = Color32::from_rgb(32, 32, 31);
+        t.card = Color32::from_rgb(45, 45, 44);
+        t.card_border = Color32::from_rgb(58, 59, 57);
+        t.canvas = Color32::from_rgb(26, 26, 25);
+        t.field = Color32::from_rgb(30, 31, 30);
+        t.field_border = Color32::from_rgb(74, 75, 73);
+        t.hover = Color32::from_rgb(59, 59, 58);
+        t.pressed = Color32::from_rgb(74, 74, 72);
+        t.text = Color32::from_rgb(249, 247, 243);
+        t.text_dim = Color32::from_rgb(200, 197, 190);
+        t.text_faint = Color32::from_rgb(142, 140, 134);
         t.icon = Color32::from_rgb(232, 230, 225);
         t.accent = Color32::from_rgb(225, 169, 95);
         t.accent_soft = Color32::from_rgba_unmultiplied(225, 169, 95, 46);
         t.accent_border = Color32::from_rgb(225, 169, 95);
         t.accent_text = Color32::from_rgb(235, 185, 117);
-        t.separator = Color32::from_rgb(50, 51, 49);
+        t.separator = Color32::from_rgb(52, 53, 51);
         t.primary_bg = Color32::from_rgb(225, 169, 95);
         t.primary_text = Color32::from_rgb(20, 18, 16);
-        t.tab_strip = Color32::from_rgb(29, 30, 29);
-        t.row_selected = Color32::from_rgb(66, 65, 61);
-        t.histogram_bg = Color32::from_rgb(25, 26, 25);
+        t.tab_strip = Color32::from_rgb(32, 32, 31);
+        t.row_selected = Color32::from_rgb(68, 67, 64);
+        t.histogram_bg = Color32::from_rgb(30, 31, 30);
     }
     t
+}
+
+/// Override dark-mode theme tokens with SpektraLab's warm darkroom palette when running under the Spektra brand.
+fn apply_spektra_override(t: Tokens) -> Tokens {
+    if crate::panels::brand::is_spektra() {
+        spektra_tokens(t)
+    } else {
+        t
+    }
 }
 
 /// Apply a theme to egui's global style and publish its tokens.

@@ -48,17 +48,17 @@ const PARAM_TAB_FIELD: &str = "__spkParamTab"; // "all" | "preDev" | "postDev"
 struct SpkColors;
 
 impl SpkColors {
-    const SURROUND: Color32 = Color32::from_rgb(35, 35, 34); // #232322 neutral darkroom mat
-    const CARD: Color32 = Color32::from_rgb(42, 42, 41); // #2a2a29 primary rail surface
-    const HEADER: Color32 = Color32::from_rgb(33, 33, 32); // #212120 top command bar chrome
-    const GROUP: Color32 = Color32::from_rgb(35, 35, 34); // #232322 grouped parameter card
+    const SURROUND: Color32 = Color32::from_rgb(40, 40, 39); // #282827 warm darkroom mat
+    const CARD: Color32 = Color32::from_rgb(45, 45, 44); // #2d2d2c primary rail surface
+    const HEADER: Color32 = Color32::from_rgb(38, 38, 37); // #262625 top command bar chrome
+    const GROUP: Color32 = Color32::from_rgb(38, 38, 37); // #262625 grouped parameter card
     const WELL: Color32 = Color32::from_rgb(26, 26, 25); // #1a1a19 recessed well / divider
-    const PLOT: Color32 = Color32::from_rgb(27, 28, 27); // #1b1c1b histogram & latitude scope
+    const PLOT: Color32 = Color32::from_rgb(30, 31, 30); // #1e1f1e histogram & latitude scope
     const PILL: Color32 = Color32::from_rgb(58, 58, 56); // #3a3a38 inactive pill
     const PILL_HOVER: Color32 = Color32::from_rgb(73, 73, 70); // #494946 hovered pill
-    const RULE: Color32 = Color32::from_rgb(55, 56, 54); // #373836 crisp 1px border
-    const TEXT: Color32 = Color32::from_rgb(246, 244, 239); // #f6f4ef warm ivory
-    const SECONDARY: Color32 = Color32::from_rgb(200, 197, 190); // #c8c5be secondary text
+    const RULE: Color32 = Color32::from_rgb(58, 59, 57); // #3a3b39 crisp 1px border
+    const TEXT: Color32 = Color32::from_rgb(249, 247, 243); // #f9f7f3 warm ivory
+    const SECONDARY: Color32 = Color32::from_rgb(212, 209, 203); // #d4d1cb secondary text
     const DIM: Color32 = Color32::from_rgb(138, 136, 130); // #8a8882 muted text
     const ACCENT: Color32 = Color32::from_rgb(225, 169, 95); // #e1a95f SpektraLab amber gold
     const ACCENT_SOFT: Color32 = Color32::from_rgba_premultiplied(32, 24, 13, 36);
@@ -667,7 +667,7 @@ impl StackDialog for SpektraDialog {
         // from `OverlayFit::ContentCapped` to `OverlayFit::Resizable`.
         let shown = Dialog::new(Label::from(tl!("Film Simulation").to_string()))
             .resizable(true)
-            .overlay(|overlay| overlay.size(init_size).min_size(MIN_SIZE))
+            .overlay(|overlay| overlay.size(init_size).min_size(MIN_SIZE).body_scroll(false))
             .remember(SaveKey::named(WINDOW_SAVE_SCOPE))
             .close_on_enter(!search_focused)
             .buttons([
@@ -1016,9 +1016,12 @@ fn draw_checker(painter: &egui::Painter, rect: Rect, tile: f32) {
 
 fn render_body(fed: &FedPreview, ui: &mut Ui, f: &mut Map<String, Value>) {
     // Paint refined darkroom card frame behind the entire 3-column studio area.
+    ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
     let avail = ui.available_size();
-    let total_h = avail.y.max(420.0);
-    let total_w = avail.x.max(680.0);
+    let vis_h = (ui.clip_rect().bottom() - ui.cursor().top()).max(0.0);
+    let raw_h = if avail.y.is_finite() && avail.y < 4096.0 { avail.y } else { vis_h };
+    let total_h = (raw_h - 2.0).max(280.0);
+    let total_w = (avail.x - 2.0).max(680.0);
 
     let (outer_rect, _) = ui.allocate_exact_size(vec2(total_w, total_h), Sense::hover());
     ui.painter().rect_filled(outer_rect, CornerRadius::same(6), SpkColors::CARD);
@@ -1431,10 +1434,16 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
             .corner_radius(CornerRadius::same(6))
             .inner_margin(Margin::symmetric(8, 3))
             .show(&mut f_ui, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_centered(|ui| {
                     ui.spacing_mut().item_spacing.x = 5.0;
                     let icon_col = if was_focused || !search.is_empty() { SpkColors::ACCENT } else { SpkColors::DIM };
-                    ui.label(RichText::new("⌕").font(theme::semibold(12.0)).color(icon_col));
+                    let (ir, _) = ui.allocate_exact_size(vec2(13.0, 18.0), Sense::hover());
+                    let lens = pos2(ir.center().x - 1.5, ir.center().y - 1.5);
+                    ui.painter().circle_stroke(lens, 3.6, Stroke::new(1.3, icon_col));
+                    ui.painter().line_segment(
+                        [pos2(lens.x + 2.6, lens.y + 2.6), pos2(lens.x + 5.6, lens.y + 5.6)],
+                        Stroke::new(1.4, icon_col),
+                    );
                     let clear_w = if search.is_empty() { 0.0 } else { 20.0 };
                     let edit = egui::TextEdit::singleline(&mut search)
                         .frame(egui::Frame::NONE)
@@ -2311,12 +2320,12 @@ fn group_card(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
         .stroke(Stroke::new(1.0, SpkColors::RULE))
         .corner_radius(CornerRadius::same(6))
         .outer_margin(Margin::symmetric(10, 0))
-        .inner_margin(Margin::symmetric(10, 8))
+        .inner_margin(Margin::symmetric(10, 7))
         .show(ui, |ui| {
             ui.set_width(inner_w);
             add(ui);
         });
-    ui.add_space(7.0);
+    ui.add_space(6.0);
 }
 
 fn card_header(ui: &mut Ui, title: &str, trailing: Option<&str>) {

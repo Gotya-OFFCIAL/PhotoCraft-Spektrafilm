@@ -532,6 +532,19 @@ fn jxl_preview_image(raw: &[u8], p: photocraft_raw::DecodedPreview) -> Result<Im
     Ok(img.with_icc(icc).oriented(photocraft_raw::orientation(raw).unwrap_or(1))?)
 }
 
+/// Extracts and turns upright a camera raw file's embedded JPEG preview as RGBA8 pixels for fast thumbnails.
+pub fn embedded_thumbnail_rgba(raw: &[u8], min_edge: u32) -> Option<(u32, u32, Vec<u8>)> {
+    let jpeg = photocraft_raw::embedded_jpeg_preview_covering(raw, min_edge)
+        .or_else(|| photocraft_raw::embedded_jpeg_preview(raw))?;
+    let img = upright_preview(raw, &jpeg, &limits()).ok()?;
+    let rgba = img.convert(ChannelLayout::Rgba, SampleType::U8);
+    let (w, h) = rgba.dimensions();
+    if w == 0 || h == 0 || rgba.data().len() != (w as usize) * (h as usize) * 4 {
+        return None;
+    }
+    Some((w, h, rgba.data().to_vec()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

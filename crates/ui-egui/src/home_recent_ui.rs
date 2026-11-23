@@ -403,6 +403,16 @@ fn load_thumbnail_image_bounded(path: &str, file_len: u64) -> Option<ColorImage>
         return read_psd_thumbnail_bounded(std_path, file_len);
     }
 
+    // 1.5 Camera RAW files: extract the camera's fast embedded JPEG preview (no full demosaic).
+    const MAX_RAW_THUMBNAIL_FILE_SIZE: u64 = 128 * 1024 * 1024;
+    if file_len <= MAX_RAW_THUMBNAIL_FILE_SIZE
+        && photocraft_io::raw::EXTENSIONS.iter().any(|e| ext.eq_ignore_ascii_case(e))
+        && let Ok(bytes) = std::fs::read(std_path)
+        && let Some((w, h, rgba)) = photocraft_io::raw::embedded_thumbnail_rgba(&bytes, 384)
+    {
+        return downsample_rgba(w, h, &rgba, 320);
+    }
+
     // Enforce 64 MB input budget for all other file types (.pcraft, PNG, JPEG, TIFF, etc.)
     const MAX_THUMBNAIL_FILE_SIZE: u64 = 64 * 1024 * 1024;
     if file_len > MAX_THUMBNAIL_FILE_SIZE {
@@ -761,6 +771,32 @@ mod tests {
         let dir_len = std::fs::metadata(&temp_dir).map(|m| m.len()).unwrap_or(0);
         let thumb = load_thumbnail_image_bounded(&path_str, dir_len);
         assert!(thumb.is_none(), "oversized thumb.png in .pcraft directory must be rejected before reading");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn recent_thumbnail_extracts_embedded_jpeg_preview_from_camera_raw() {
+        let temp_dir = std::env::temp_dir().join(format!("photocraft_raw_thumb_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let file_path = temp_dir.join("sample.cr3");
+        let path_str = file_path.to_string_lossy().into_owned();
+
+        let img = photocraft_codecs::Image::from_raw(
+            640,
+            400,
+            photocraft_codecs::ChannelLayout::Rgb,
+            photocraft_codecs::SampleType::U8,
+            [210, 145, 72].repeat(640 * 400),
+        )
+        .unwrap();
+        let jpeg = photocraft_codecs::encode(&img, photocraft_codecs::Format::Jpeg, &photocraft_codecs::EncodeOptions::default()).unwrap();
+        let cr3 = photocraft_raw::testgen::cr3_preview(&jpeg, 1);
+        std::fs::write(&file_path, &cr3).unwrap();
+
+        let thumb = load_thumbnail_image_bounded(&path_str, cr3.len() as u64).expect("must extract embedded JPEG preview from CR3");
+        assert_eq!(thumb.size, [320, 200]);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

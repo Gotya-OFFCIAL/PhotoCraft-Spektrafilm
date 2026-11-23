@@ -135,26 +135,38 @@ fn answer(app: &mut PhotocraftApp, ui: &egui::Ui, tool: Tool, end: End, out: &Ba
 fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     lead(app, ui);
     if crate::panels::brand::is_spektra() && app.session.active().is_some() {
-        let pill_label = "✦ SpektraFilm 胶片暗房";
-        let galley = ui.painter().layout_no_wrap(pill_label.into(), crate::theme::semibold(11.5), egui::Color32::WHITE);
-        let (p_rect, p_resp) = ui.allocate_exact_size(egui::vec2(galley.size().x + 18.0, 22.0), egui::Sense::click());
-        let p_resp = p_resp
-            .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .on_hover_text("打开 SpektraFilm 81 波长光谱胶片与暗房印相工作台 (Filter › SpektraFilm › Film Simulation…)");
-        let amber = egui::Color32::from_rgb(225, 169, 95);
-        let bg = if p_resp.hovered() {
-            egui::Color32::from_rgba_unmultiplied(225, 169, 95, 42)
+        let enabled = app.session.is_enabled(crate::spektra_ui::COMMAND);
+        let t = crate::theme::Tokens::get(ui.ctx());
+        let (fg, bg_normal, bg_hover, border) = if !enabled {
+            (t.text_faint, t.field, t.field, t.separator)
+        } else if t.dark() {
+            let a = t.accent;
+            (
+                a,
+                egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), 22),
+                egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), 46),
+                egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), 180),
+            )
         } else {
-            egui::Color32::from_rgba_unmultiplied(225, 169, 95, 22)
+            (t.accent_text, t.accent_soft, t.hover, t.accent_border)
         };
-        ui.painter().rect_filled(p_rect, egui::CornerRadius::same(99), bg);
-        ui.painter().rect_stroke(p_rect, egui::CornerRadius::same(99), egui::Stroke::new(1.0, amber), egui::StrokeKind::Inside);
-        ui.painter().text(p_rect.center(), egui::Align2::CENTER_CENTER, pill_label, crate::theme::semibold(11.5), amber);
-        if p_resp.clicked()
-            && let Err(e) = crate::menus::invoke(app, ui.ctx(), "filter.spektra.filmSim", json!({}))
-        {
-            app.ui.status = e;
-        }
+        ui.add_enabled_ui(enabled, |ui| {
+            let pill_label = "✦ SpektraFilm 胶片暗房";
+            let galley = ui.painter().layout_no_wrap(pill_label.into(), crate::theme::semibold(11.5), fg);
+            let (p_rect, p_resp) = ui.allocate_exact_size(egui::vec2(galley.size().x + 18.0, 22.0), egui::Sense::click());
+            let p_resp = if enabled { p_resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { p_resp }
+                .on_hover_text("打开 SpektraFilm 81 波长光谱胶片与暗房印相工作台 (Filter › SpektraFilm › Film Simulation…)")
+                .on_disabled_hover_text("请先选中像素图层或智能对象图层以启用光谱胶片暗房");
+            let bg = if enabled && p_resp.hovered() { bg_hover } else { bg_normal };
+            ui.painter().rect_filled(p_rect, egui::CornerRadius::same(99), bg);
+            ui.painter().rect_stroke(p_rect, egui::CornerRadius::same(99), egui::Stroke::new(1.0, border), egui::StrokeKind::Inside);
+            ui.painter().text(p_rect.center(), egui::Align2::CENTER_CENTER, pill_label, crate::theme::semibold(11.5), fg);
+            if p_resp.clicked()
+                && let Err(e) = crate::menus::invoke(app, ui.ctx(), "filter.spektra.filmSim", json!({}))
+            {
+                app.ui.status = e;
+            }
+        });
         Divider::vertical().show(ui);
     }
     if app.ui.transform.is_some() {

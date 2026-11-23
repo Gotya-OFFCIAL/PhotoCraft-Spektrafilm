@@ -27,7 +27,41 @@ mod tests;
 /// flipped mid-session (a shell save during `actions.play`): a factor that followed it would change
 /// [`crate::filter_dialog::FilterPreviewKey`] under a finished preview and recompute it inline,
 /// the very stall this avoids.
+/// Target preview pixel budget for SpektraFilm's 81-wavelength spectral simulation (~800x800 px).
+/// Keeps live darkroom slider feedback interactive on 16–50 MP RAW files while OK always renders full-res.
+const SPEKTRA_PREVIEW_PIXELS: u64 = 650_000;
+
+fn is_spektra_preview(doc: &Document, cmd: &str, params: &serde_json::Value) -> bool {
+    if cmd == crate::spektra_ui::COMMAND {
+        return true;
+    }
+    if cmd == "layer.smartFilter.setParams"
+        && let Some(layer_id) = params.get("layer").and_then(serde_json::Value::as_u64)
+        && let Some(index) = params.get("index").and_then(serde_json::Value::as_u64).and_then(|i| usize::try_from(i).ok())
+        && let Some(layer) = doc.layer(photocraft_doc::LayerId(layer_id))
+        && let LayerContent::Smart(sm) = &layer.content
+        && let Some(sf) = sm.smart_filters.get(index)
+    {
+        return sf.command == crate::spektra_ui::COMMAND;
+    }
+    false
+}
+
+fn spektra_preview_factor(doc: &Document, reduced: bool) -> u32 {
+    if !reduced {
+        return 1;
+    }
+    let px = doc.size.area();
+    if px <= SPEKTRA_PREVIEW_PIXELS {
+        return 1;
+    }
+    ((px as f64 / SPEKTRA_PREVIEW_PIXELS as f64).sqrt().ceil() as u32).max(2)
+}
+
 pub(crate) fn filter_preview_factor(app: &PhotocraftApp, doc: &Document, cmd: &str, params: &serde_json::Value) -> u32 {
+    if is_spektra_preview(doc, cmd, params) {
+        return spektra_preview_factor(doc, crate::proxy::reduced_previews(app));
+    }
     // A smart filter edit re-renders the whole stack: every stage constrains the factor.
     let k = crate::filter_dialog::smart_preview_factor(doc, cmd, params, crate::proxy::preview_factor(doc, crate::proxy::reduced_previews(app)));
     if cfg!(target_arch = "wasm32") { k } else { crate::proxy::view_factor(k, app.current_zoom(), doc.size.area()) }

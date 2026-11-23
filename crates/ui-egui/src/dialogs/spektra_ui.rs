@@ -11,7 +11,7 @@ use craft::ui::dialog::{Dialog, DialogId, DialogResult, DialogStack, StackDialog
 use craft::ui::patterns::form_dialogs::{Param, ParamKind};
 use craft::ui::runtime::env::Label;
 use craft::ui::sections::{DialogRole, FooterButton};
-use egui::{Align2, Color32, CornerRadius, Id, Rect, RichText, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, Ui, Vec2, pos2, vec2};
+use egui::{Align2, Color32, CornerRadius, Id, Margin, Rect, RichText, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, Ui, Vec2, pos2, vec2};
 use photocraft_codecs::{ChannelLayout, SampleType};
 use photocraft_doc::Document;
 use serde_json::{Map, Value, json};
@@ -21,8 +21,8 @@ use crate::filter_dialog::FilterPreviewKey;
 use crate::theme;
 
 pub const COMMAND: &str = "filter.spektra.filmSim";
-pub const DEFAULT_SIZE: Vec2 = vec2(1120.0, 700.0);
-pub const MIN_SIZE: Vec2 = vec2(860.0, 540.0);
+pub const DEFAULT_SIZE: Vec2 = vec2(1200.0, 740.0);
+pub const MIN_SIZE: Vec2 = vec2(900.0, 560.0);
 const REMEMBER_SCOPE: &str = "photocraft.filter.spektra.filmSim";
 const WINDOW_SAVE_SCOPE: &str = "photocraft.filter.spektra.filmSim.window";
 
@@ -31,6 +31,8 @@ const WINDOW_SAVE_SCOPE: &str = "photocraft.filter.spektra.filmSim.window";
 const VIEW_MODE_FIELD: &str = "__spkViewMode"; // "process" | "split" | "original"
 const SPLIT_POS_FIELD: &str = "__spkSplitPos"; // 0.05..=0.95
 const FIT_FIELD: &str = "__spkFit"; // bool (default true)
+const FIT_ZOOM_FIELD: &str = "__spkFitZoom"; // f64: last computed fit zoom from canvas
+const HOLD_ORIG_FIELD: &str = "__spkHoldOrig"; // bool: transient hold-to-compare from top bar
 const ZOOM_FIELD: &str = "__pvZoom";
 const CENTER_X_FIELD: &str = "__pvCx";
 const CENTER_Y_FIELD: &str = "__pvCy";
@@ -40,31 +42,37 @@ const AUTO_PAPER_FIELD: &str = "__spkAutoPaper"; // bool (default true)
 const PARAM_TAB_FIELD: &str = "__spkParamTab"; // "all" | "preDev" | "postDev"
 
 // ---------------------------------------------------------------------------
-// SpektraLab Visual Tokens (`SpektraLab/desktop/src/styles/theme.css`)
+// SpektraLab Visual Tokens (harmonized with `spektra.darkroom` theme)
 // ---------------------------------------------------------------------------
 
 struct SpkColors;
 
 impl SpkColors {
-    const GROUND: Color32 = Color32::from_rgb(72, 72, 70); // Darkroom surround (#484846 / #5f5f5f)
-    const CARD: Color32 = Color32::from_rgb(45, 45, 44); // #2d2d2c
-    const WELL: Color32 = Color32::from_rgb(26, 26, 25); // #1a1a19
-    const PLOT: Color32 = Color32::from_rgb(30, 31, 30); // #1e1f1e
-    const PILL: Color32 = Color32::from_rgb(76, 76, 74); // #4c4c4a
-    const RULE: Color32 = Color32::from_rgb(58, 59, 57); // #3a3b39
-    const TEXT: Color32 = Color32::from_rgb(249, 247, 243); // #f9f7f3
-    const SECONDARY: Color32 = Color32::from_rgb(218, 216, 212); // #dad8d4
-    const DIM: Color32 = Color32::from_rgb(142, 141, 138); // #8e8d8a
-    const ACCENT: Color32 = Color32::from_rgb(225, 169, 95); // #e1a95f (SpektraLab amber gold)
-    const SELECTION: Color32 = Color32::WHITE; // #ffffff
-    const ON_SELECTION: Color32 = Color32::from_rgb(15, 14, 14); // #0f0e0e
-    const KNOB: Color32 = Color32::from_rgb(251, 248, 243); // #fbf8f3
-    const LAT_INSIDE: Color32 = Color32::from_rgb(156, 156, 154); // #9c9c9a
-    const LAT_BEYOND: Color32 = Color32::from_rgb(63, 63, 61); // #3f3f3d
-    const HIST_R: Color32 = Color32::from_rgb(232, 82, 78); // #e8524e
-    const HIST_G: Color32 = Color32::from_rgb(98, 196, 98); // #62c462
-    const HIST_B: Color32 = Color32::from_rgb(93, 125, 232); // #5d7de8
-    const HIST_Y: Color32 = Color32::from_rgb(189, 189, 189); // #bdbdbd
+    const SURROUND: Color32 = Color32::from_rgb(35, 35, 34); // #232322 neutral darkroom mat
+    const CARD: Color32 = Color32::from_rgb(42, 42, 41); // #2a2a29 primary rail surface
+    const HEADER: Color32 = Color32::from_rgb(33, 33, 32); // #212120 top command bar chrome
+    const GROUP: Color32 = Color32::from_rgb(35, 35, 34); // #232322 grouped parameter card
+    const WELL: Color32 = Color32::from_rgb(26, 26, 25); // #1a1a19 recessed well / divider
+    const PLOT: Color32 = Color32::from_rgb(27, 28, 27); // #1b1c1b histogram & latitude scope
+    const PILL: Color32 = Color32::from_rgb(58, 58, 56); // #3a3a38 inactive pill
+    const PILL_HOVER: Color32 = Color32::from_rgb(73, 73, 70); // #494946 hovered pill
+    const RULE: Color32 = Color32::from_rgb(55, 56, 54); // #373836 crisp 1px border
+    const TEXT: Color32 = Color32::from_rgb(246, 244, 239); // #f6f4ef warm ivory
+    const SECONDARY: Color32 = Color32::from_rgb(200, 197, 190); // #c8c5be secondary text
+    const DIM: Color32 = Color32::from_rgb(138, 136, 130); // #8a8882 muted text
+    const ACCENT: Color32 = Color32::from_rgb(225, 169, 95); // #e1a95f SpektraLab amber gold
+    const ACCENT_SOFT: Color32 = Color32::from_rgba_premultiplied(32, 24, 13, 36);
+    const ACCENT_BORDER: Color32 = Color32::from_rgba_premultiplied(168, 126, 71, 190);
+    const ON_ACCENT: Color32 = Color32::from_rgb(20, 18, 16); // #141210 dark ink on amber
+    const READY_DOT: Color32 = Color32::from_rgb(114, 196, 114); // #72c472 live ready indicator
+    const KNOB: Color32 = Color32::from_rgb(251, 248, 243); // #fbf8f3 slider knob
+    const LAT_INSIDE: Color32 = Color32::from_rgb(208, 164, 102); // warm amber in sweet spot
+    const LAT_BEYOND: Color32 = Color32::from_rgb(104, 104, 102); // neutral outside sweet spot
+    const LAT_WINDOW: Color32 = Color32::from_rgb(46, 45, 42); // subtle sweet-spot backdrop
+    const HIST_R: Color32 = Color32::from_rgb(232, 82, 78);
+    const HIST_G: Color32 = Color32::from_rgb(98, 196, 98);
+    const HIST_B: Color32 = Color32::from_rgb(93, 125, 232);
+    const HIST_Y: Color32 = Color32::from_rgb(205, 203, 198);
 }
 
 // ---------------------------------------------------------------------------
@@ -579,6 +587,7 @@ struct FedPreview {
     orig: Option<CachedTex>,
     filt: Option<CachedTex>,
     base_k: u32,
+    computing: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -643,21 +652,39 @@ impl StackDialog for SpektraDialog {
 
     fn show(&mut self, ui: &mut Ui, _stack: &DialogStack) -> Option<DialogResult<SpektraAnswer>> {
         let SpektraDialog { id, fields, captured, fed, .. } = self;
-        let mut preview = fields.get("__preview").and_then(Value::as_bool).unwrap_or(true);
+        let preview_before = fields.get("__preview").and_then(Value::as_bool).unwrap_or(true);
+        let mut footer_preview = preview_before;
+        let search_focused_id = egui::Id::unique("spektra-search-focused");
+        let search_focused = ui
+            .data(|d| d.get_temp::<bool>(search_focused_id))
+            .unwrap_or(false);
+        let screen = ui.max_rect().size();
+        let init_size = vec2(
+            DEFAULT_SIZE.x.min((screen.x - 24.0).max(MIN_SIZE.x)),
+            DEFAULT_SIZE.y.min((screen.y - 24.0).max(MIN_SIZE.y)),
+        );
+        // `.resizable(true)` must come before `.overlay(...)` so `Overlay::dialog()` switches
+        // from `OverlayFit::ContentCapped` to `OverlayFit::Resizable`.
         let shown = Dialog::new(Label::from(tl!("Film Simulation").to_string()))
-            .overlay(|overlay| overlay.resizable(true).size(DEFAULT_SIZE).min_size(MIN_SIZE))
+            .resizable(true)
+            .overlay(|overlay| overlay.size(init_size).min_size(MIN_SIZE))
             .remember(SaveKey::named(WINDOW_SAVE_SCOPE))
-            .close_on_enter(true)
+            .close_on_enter(!search_focused)
             .buttons([
                 FooterButton::new(Label::from(tl!("Cancel").to_string()), DialogRole::Cancel),
                 FooterButton::new(Label::from(tl!("OK").to_string()), DialogRole::Accept),
             ])
             .footer(|ui, _| {
-                Checkbox::new(Bind::bound(&mut preview)).label(Label::from(tl!("Preview").to_string())).show(ui);
+                Checkbox::new(Bind::bound(&mut footer_preview)).label(Label::from(tl!("Preview").to_string())).show(ui);
             })
             .show(ui, |ui, _| {
                 render_body(fed, ui, fields);
             });
+        // The footer and the right rail both expose Preview. The footer owns a local binding,
+        // while the rail writes the dialog fields; merge them instead of blindly overwriting the
+        // rail's value with the footer's stale snapshot on every frame.
+        let rail_preview = fields.get("__preview").and_then(Value::as_bool).unwrap_or(preview_before);
+        let preview = if footer_preview != preview_before { footer_preview } else { rail_preview };
         fields.insert("__preview".into(), json!(preview));
         shown.result(|| SpektraAnswer { id: *id, fields: fields.clone(), captured: captured.clone() })
     }
@@ -834,13 +861,15 @@ pub(crate) fn feed(app: &mut PhotocraftApp, ctx: &egui::Context) {
             .then(|| p.result.clone().map(|r| (p.key.clone(), r)))
             .flatten()
     });
+    let req = preview_request(app);
     let base_k = filtered
         .as_ref()
         .map(|(k, _)| k.k)
         .unwrap_or_else(|| {
-            let params = preview_request(app).map(|(_, _, p)| p).unwrap_or_else(|| json!({}));
-            crate::canvas::filter_preview_factor(app, &st.doc, COMMAND, &params)
+            let (cmd, params) = req.as_ref().map(|(_, c, p)| (c.as_str(), p.clone())).unwrap_or((COMMAND, json!({})));
+            crate::canvas::filter_preview_factor(app, &st.doc, cmd, &params)
         });
+    let computing = preview_on && app.filter_preview_worker.busy();
     let orig_key = TexKey::Original(doc_id, revision, base_k);
     let filt_key = filtered.as_ref().map(|(k, _)| TexKey::Filtered(k.clone()));
 
@@ -876,6 +905,7 @@ pub(crate) fn feed(app: &mut PhotocraftApp, ctx: &egui::Context) {
             d.view_sig = Some(view_sig);
         }
         d.fed.base_k = base_k;
+        d.fed.computing = computing;
         if let Some(tex) = next_orig {
             d.orig_key = Some(orig_key);
             d.fed.orig = Some(tex);
@@ -985,43 +1015,45 @@ fn draw_checker(painter: &egui::Painter, rect: Rect, tile: f32) {
 // ---------------------------------------------------------------------------
 
 fn render_body(fed: &FedPreview, ui: &mut Ui, f: &mut Map<String, Value>) {
-    // Paint darkroom card background behind the whole 3-column studio area.
+    // Paint refined darkroom card frame behind the entire 3-column studio area.
     let avail = ui.available_size();
-    let total_h = avail.y.max(460.0);
-    let total_w = avail.x.max(780.0);
+    let total_h = avail.y.max(420.0);
+    let total_w = avail.x.max(680.0);
 
     let (outer_rect, _) = ui.allocate_exact_size(vec2(total_w, total_h), Sense::hover());
     ui.painter().rect_filled(outer_rect, CornerRadius::same(6), SpkColors::CARD);
     ui.painter().rect_stroke(outer_rect, CornerRadius::same(6), Stroke::new(1.0, SpkColors::WELL), StrokeKind::Inside);
 
-    // Top bar (38px) + 3-column body below
-    let topbar_h = 38.0;
+    // Two-row darkroom command header (68px) + responsive 3-column studio body.
+    let topbar_h = 68.0;
     let topbar_rect = Rect::from_min_size(outer_rect.min, vec2(outer_rect.width(), topbar_h));
     let body_rect = Rect::from_min_max(pos2(outer_rect.left(), topbar_rect.bottom() + 1.0), outer_rect.max);
 
-    // Draw top bar
+    ui.painter().rect_filled(
+        topbar_rect,
+        CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 },
+        SpkColors::HEADER,
+    );
     let mut top_ui = ui.new_child(egui::UiBuilder::new().max_rect(topbar_rect));
-    draw_top_bar(&mut top_ui, f);
+    draw_top_bar(&mut top_ui, fed, f);
     ui.painter().line_segment(
         [pos2(outer_rect.left(), topbar_rect.bottom()), pos2(outer_rect.right(), topbar_rect.bottom())],
         Stroke::new(1.0, SpkColors::RULE),
     );
 
-    // 3 Columns: Left Rail (264px) | Center Viewfinder (flex) | Right Rail (292px)
-    let left_w = 264.0;
-    let right_w = 292.0;
+    // Responsive 3 columns: Left Stock Rail | Center Viewfinder | Right Physics Rail
+    let left_w = (body_rect.width() * 0.24).clamp(236.0, 276.0);
+    let right_w = (body_rect.width() * 0.27).clamp(278.0, 316.0);
     let left_rect = Rect::from_min_max(body_rect.min, pos2((body_rect.left() + left_w).min(body_rect.right()), body_rect.bottom()));
     let right_rect = Rect::from_min_max(pos2((body_rect.right() - right_w).max(left_rect.right()), body_rect.top()), body_rect.max);
     let center_rect = Rect::from_min_max(pos2(left_rect.right() + 1.0, body_rect.top()), pos2(right_rect.left() - 1.0, body_rect.bottom()));
 
-    // Vertical dividers
     ui.painter().line_segment([pos2(left_rect.right(), body_rect.top()), pos2(left_rect.right(), body_rect.bottom())], Stroke::new(1.0, SpkColors::WELL));
     ui.painter().line_segment([pos2(right_rect.left(), body_rect.top()), pos2(right_rect.left(), body_rect.bottom())], Stroke::new(1.0, SpkColors::WELL));
 
     let mut left_ui = ui.new_child(egui::UiBuilder::new().max_rect(left_rect));
     draw_left_rail(&mut left_ui, f);
 
-    // Prepare preview textures & scope stats
     let stats = draw_center_canvas(fed, ui, center_rect, f);
 
     let mut right_ui = ui.new_child(egui::UiBuilder::new().max_rect(right_rect));
@@ -1029,82 +1061,299 @@ fn render_body(fed: &FedPreview, ui: &mut Ui, f: &mut Map<String, Value>) {
 }
 
 // ---------------------------------------------------------------------------
-// Top Bar (`TopBar.tsx`: Presets · Process/Split/Original Pills · Zoom)
+// Top Bar (`TopBar`: Presets · Active Pair Badge · View Modes · Compare · Zoom)
 // ---------------------------------------------------------------------------
 
-fn draw_top_bar(ui: &mut Ui, f: &mut Map<String, Value>) {
-    let rect = ui.max_rect().shrink2(vec2(12.0, 4.0));
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::left_to_right(egui::Align::Center)));
-    let ui = &mut child;
-    ui.spacing_mut().item_spacing.x = 6.0;
+struct PresetRecipe {
+    label: &'static str,
+    film: &'static str,
+    paper: &'static str,
+    print_chain: bool,
+    ev: f64,
+    couplers: bool,
+    couplers_amount: f64,
+    input_gamut: bool,
+    output_gamut: bool,
+    print_ev: f64,
+    cc_c: f64,
+    cc_m: f64,
+    cc_y: f64,
+}
 
-    // Quick Recipe Presets
-    ui.label(RichText::new("预设配方").font(theme::semibold(11.0)).color(SpkColors::DIM));
-    let presets: &[(&str, &str, &str, bool, bool, f64)] = &[
-        ("Portra 人像", "kodak_portra_400", "kodak_portra_endura", true, false, 0.0),
-        ("Velvia 风光", "fujifilm_velvia_100", "fujifilm_crystal_archive_typeii", true, false, 0.0),
-        ("富士 400H 日系", "fujifilm_pro_400h", "fujifilm_crystal_archive_typeii", true, false, 0.0),
-        ("Vision3 电影", "kodak_vision3_500t", "kodak_supra_endura", true, true, 0.0),
-        ("Gold 暖阳", "kodak_gold_200", "kodak_portra_endura", true, false, 6.0),
-    ];
+const PRESET_RECIPES: &[PresetRecipe] = &[
+    PresetRecipe {
+        label: "Portra 人像",
+        film: "kodak_portra_400",
+        paper: "kodak_portra_endura",
+        print_chain: true,
+        ev: 0.0,
+        couplers: false,
+        couplers_amount: 1.0,
+        input_gamut: false,
+        output_gamut: false,
+        print_ev: 0.0,
+        cc_c: 0.0,
+        cc_m: 0.0,
+        cc_y: 0.0,
+    },
+    PresetRecipe {
+        label: "Velvia 风光",
+        film: "fujifilm_velvia_100",
+        paper: "fujifilm_crystal_archive_typeii",
+        print_chain: true,
+        ev: 0.0,
+        couplers: false,
+        couplers_amount: 1.0,
+        input_gamut: false,
+        output_gamut: false,
+        print_ev: 0.0,
+        cc_c: 0.0,
+        cc_m: 0.0,
+        cc_y: 0.0,
+    },
+    PresetRecipe {
+        label: "富士 400H 日系",
+        film: "fujifilm_pro_400h",
+        paper: "fujifilm_crystal_archive_typeii",
+        print_chain: true,
+        ev: 0.0,
+        couplers: false,
+        couplers_amount: 1.0,
+        input_gamut: false,
+        output_gamut: false,
+        print_ev: 0.0,
+        cc_c: 0.0,
+        cc_m: 0.0,
+        cc_y: 0.0,
+    },
+    PresetRecipe {
+        label: "Vision3 电影",
+        film: "kodak_vision3_500t",
+        paper: "kodak_supra_endura",
+        print_chain: true,
+        ev: 0.0,
+        couplers: true,
+        couplers_amount: 1.0,
+        input_gamut: false,
+        output_gamut: false,
+        print_ev: 0.0,
+        cc_c: 0.0,
+        cc_m: 0.0,
+        cc_y: 0.0,
+    },
+    PresetRecipe {
+        label: "Gold 暖阳",
+        film: "kodak_gold_200",
+        paper: "kodak_portra_endura",
+        print_chain: true,
+        ev: 0.0,
+        couplers: false,
+        couplers_amount: 1.0,
+        input_gamut: false,
+        output_gamut: false,
+        print_ev: 0.0,
+        cc_c: 0.0,
+        cc_m: 0.0,
+        cc_y: 6.0,
+    },
+];
+
+fn approx_eq(a: f64, b: f64) -> bool {
+    (a - b).abs() < 0.005
+}
+
+fn draw_top_bar(ui: &mut Ui, fed: &FedPreview, f: &mut Map<String, Value>) {
+    let rect = ui.max_rect().shrink2(vec2(12.0, 5.0));
+    let preset_rect = Rect::from_min_size(rect.min, vec2(rect.width(), 26.0));
+    let controls_rect = Rect::from_min_max(pos2(rect.left(), preset_rect.bottom() + 4.0), rect.max);
+
     let cur_film = f.get("film").and_then(Value::as_str).unwrap_or("kodak_portra_400").to_string();
     let cur_paper = f.get("paper").and_then(Value::as_str).unwrap_or("kodak_portra_endura").to_string();
     let cur_print = f.get("printChain").and_then(Value::as_bool).unwrap_or(true);
+    let cur_ev = f.get("ev").and_then(Value::as_f64).unwrap_or(0.0);
+    let cur_couplers = f.get("couplers").and_then(Value::as_bool).unwrap_or(false);
+    let cur_couplers_amt = f.get("couplersAmount").and_then(Value::as_f64).unwrap_or(1.0);
+    let cur_in_gamut = f.get("inputGamut").and_then(Value::as_bool).unwrap_or(false);
+    let cur_out_gamut = f.get("outputGamut").and_then(Value::as_bool).unwrap_or(false);
+    let cur_print_ev = f.get("printEv").and_then(Value::as_f64).unwrap_or(0.0);
+    let cur_cc_c = f.get("ccCyan").and_then(Value::as_f64).unwrap_or(0.0);
+    let cur_cc_m = f.get("ccMagenta").and_then(Value::as_f64).unwrap_or(0.0);
+    let cur_cc_y = f.get("ccYellow").and_then(Value::as_f64).unwrap_or(0.0);
 
-    for &(label, film, paper, print_chain, couplers, cc_y) in presets {
-        let is_pos = find_film(film).polarity == Polarity::Positive;
-        let active = cur_film == film && (is_pos || (cur_paper == paper && cur_print == print_chain));
-        if chip_button(ui, label, active).clicked() {
-            f.insert("film".into(), json!(film));
-            if !is_pos {
-                f.insert("paper".into(), json!(paper));
-                f.insert("printChain".into(), json!(print_chain));
+    // Row 1: Quick recipe presets on left, active film/paper badge on right.
+    {
+        let mut row = ui.new_child(egui::UiBuilder::new().max_rect(preset_rect).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        let ui = &mut row;
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(RichText::new("经典配方").font(theme::semibold(11.0)).color(SpkColors::DIM));
+
+        for r in PRESET_RECIPES {
+            let is_pos = find_film(r.film).polarity == Polarity::Positive;
+            let stock_ok = cur_film == r.film && (is_pos || (cur_paper == r.paper && cur_print == r.print_chain));
+            let pre_ok = approx_eq(cur_ev, r.ev) && cur_in_gamut == r.input_gamut && cur_out_gamut == r.output_gamut;
+            let chem_ok = is_pos
+                || (cur_couplers == r.couplers
+                    && (!r.couplers || approx_eq(cur_couplers_amt, r.couplers_amount))
+                    && approx_eq(cur_print_ev, r.print_ev)
+                    && approx_eq(cur_cc_c, r.cc_c)
+                    && approx_eq(cur_cc_m, r.cc_m)
+                    && approx_eq(cur_cc_y, r.cc_y));
+            if chip_button(ui, r.label, stock_ok && pre_ok && chem_ok).clicked() {
+                f.insert("film".into(), json!(r.film));
+                if !is_pos {
+                    f.insert("paper".into(), json!(r.paper));
+                    f.insert("printChain".into(), json!(r.print_chain));
+                }
+                f.insert("ev".into(), json!(r.ev));
+                f.insert("couplers".into(), json!(if is_pos { false } else { r.couplers }));
+                f.insert("couplersAmount".into(), json!(r.couplers_amount));
+                f.insert("inputGamut".into(), json!(r.input_gamut));
+                f.insert("outputGamut".into(), json!(r.output_gamut));
+                f.insert("printEv".into(), json!(r.print_ev));
+                f.insert("ccCyan".into(), json!(r.cc_c));
+                f.insert("ccMagenta".into(), json!(r.cc_m));
+                f.insert("ccYellow".into(), json!(r.cc_y));
             }
-            f.insert("couplers".into(), json!(couplers));
-            f.insert("ccYellow".into(), json!(cc_y));
-            f.insert("ccCyan".into(), json!(0.0));
-            f.insert("ccMagenta".into(), json!(0.0));
         }
+
+        let film_info = find_film(&cur_film);
+        let pair_text = if film_info.polarity == Polarity::Positive {
+            format!("{} · 正片直扫", film_info.short_name)
+        } else if cur_print {
+            format!("{} · {}", film_info.short_name, find_paper(&cur_paper).short_name)
+        } else {
+            format!("{} · 负片直扫", film_info.short_name)
+        };
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let galley = ui.painter().layout_no_wrap(pair_text.clone(), theme::medium(10.5), SpkColors::ACCENT);
+            let w = galley.size().x + 16.0;
+            let (badge_r, _) = ui.allocate_exact_size(vec2(w, 21.0), Sense::hover());
+            ui.painter().rect_filled(badge_r, CornerRadius::same(99), SpkColors::ACCENT_SOFT);
+            ui.painter().rect_stroke(badge_r, CornerRadius::same(99), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
+            ui.painter().text(badge_r.center(), Align2::CENTER_CENTER, pair_text, theme::medium(10.5), SpkColors::ACCENT);
+        });
     }
 
-    ui.add_space(10.0);
+    // Row 2: View mode segmented container on left, compare & smooth zoom controls on right.
+    let mut row = ui.new_child(egui::UiBuilder::new().max_rect(controls_rect).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    let ui = &mut row;
+    ui.spacing_mut().item_spacing.x = 8.0;
 
-    // Center View Mode Action Pills (`Process` | `Split` | `Original`)
     let mode = f.get(VIEW_MODE_FIELD).and_then(Value::as_str).unwrap_or("process").to_string();
-    for (id, label, tip) in [
-        ("process", "显影效果 Process", "查看当前胶片与暗房印相完整效果（按住画布可临时对比原图）"),
-        ("split", "分屏对比 Split", "在画布上左右拖动分界线实时对比原图与冲印效果"),
-        ("original", "原图 Original", "查看未经胶片模拟的原始图层图像"),
-    ] {
-        if action_pill(ui, label, mode == id).on_hover_text(tip).clicked() {
+    let mode_items = [
+        ("process", "显影效果", "查看当前胶片与暗房印相完整效果"),
+        ("split", "分屏对比", "在画布上左右拖动分界线实时对比原图与冲印效果"),
+        ("original", "原图", "查看未经胶片模拟的原始图层图像"),
+    ];
+    let seg_pad = 3.0;
+    let mode_widths: Vec<f32> = mode_items
+        .iter()
+        .map(|(_, l, _)| (ui.painter().layout_no_wrap((*l).into(), theme::semibold(11.0), SpkColors::TEXT).size().x + 20.0).max(66.0))
+        .collect();
+    let mode_total_w = mode_widths.iter().sum::<f32>() + seg_pad * 2.0 + 4.0;
+    let (seg_outer, _) = ui.allocate_exact_size(vec2(mode_total_w, 26.0), Sense::hover());
+    ui.painter().rect_filled(seg_outer, CornerRadius::same(99), SpkColors::WELL);
+    ui.painter().rect_stroke(seg_outer, CornerRadius::same(99), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
+    let mut sx = seg_outer.left() + seg_pad;
+    for ((id, label, tip), w) in mode_items.into_iter().zip(mode_widths) {
+        let r = Rect::from_min_size(pos2(sx, seg_outer.top() + seg_pad), vec2(w, seg_outer.height() - seg_pad * 2.0));
+        let active = mode == id;
+        let resp = ui
+            .interact(r, ui.scope_id().with(("mode", id)), Sense::click())
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(tip);
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, active, label));
+        let bg = if active {
+            SpkColors::ACCENT_SOFT
+        } else if resp.hovered() {
+            Color32::from_white_alpha(12)
+        } else {
+            Color32::TRANSPARENT
+        };
+        if bg != Color32::TRANSPARENT {
+            ui.painter().rect_filled(r, CornerRadius::same(99), bg);
+        }
+        if active {
+            ui.painter().rect_stroke(r, CornerRadius::same(99), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
+        }
+        let fg = if active {
+            SpkColors::ACCENT
+        } else if resp.hovered() {
+            SpkColors::TEXT
+        } else {
+            SpkColors::SECONDARY
+        };
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, label, theme::semibold(11.0), fg);
+        if resp.clicked() {
             f.insert(VIEW_MODE_FIELD.into(), json!(id));
         }
+        sx += w + 2.0;
     }
 
-    // Right-aligned Zoom & Fit Controls
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.spacing_mut().item_spacing.x = 5.0;
         let fit = f.get(FIT_FIELD).and_then(Value::as_bool).unwrap_or(true);
-        let mut zoom = f.get(ZOOM_FIELD).and_then(Value::as_f64).map(|v| v as f32).filter(|z| z.is_finite() && *z > 0.0).unwrap_or(1.0);
+        let fit_zoom = f
+            .get(FIT_ZOOM_FIELD)
+            .and_then(Value::as_f64)
+            .map(|v| v as f32)
+            .filter(|z| z.is_finite() && *z > 0.0)
+            .unwrap_or(1.0);
+        let stored_zoom = f
+            .get(ZOOM_FIELD)
+            .and_then(Value::as_f64)
+            .map(|v| v as f32)
+            .filter(|z| z.is_finite() && *z > 0.0)
+            .unwrap_or(fit_zoom);
+        let effective_zoom = if fit { fit_zoom } else { stored_zoom };
+
         if small_pill_button(ui, "+", false).on_hover_text("放大预览").clicked() {
-            zoom = (zoom * 1.4142).clamp(0.125, 8.0);
-            f.insert(ZOOM_FIELD.into(), json!(zoom));
+            let next = (effective_zoom * 1.4142).clamp(0.125, 8.0);
+            f.insert(ZOOM_FIELD.into(), json!(next));
             f.insert(FIT_FIELD.into(), json!(false));
         }
-        let zoom_text = if fit { "Fit".to_string() } else { format!("{:.0}%", zoom * 100.0) };
-        if small_pill_button(ui, &zoom_text, fit).on_hover_text("点击切换适合窗口 (Fit) / 100%").clicked() {
-            if fit {
-                f.insert(FIT_FIELD.into(), json!(false));
-                f.insert(ZOOM_FIELD.into(), json!(1.0));
-            } else {
-                f.insert(FIT_FIELD.into(), json!(true));
-            }
+        if small_pill_button(ui, "100%", !fit && (effective_zoom - 1.0).abs() < 0.01)
+            .on_hover_text("以 100% 原始比例查看")
+            .clicked()
+        {
+            f.insert(FIT_FIELD.into(), json!(false));
+            f.insert(ZOOM_FIELD.into(), json!(1.0));
+        }
+        if small_pill_button(ui, "适合", fit).on_hover_text("适合取景器窗口显示").clicked() {
+            f.insert(FIT_FIELD.into(), json!(true));
         }
         if small_pill_button(ui, "−", false).on_hover_text("缩小预览").clicked() {
-            zoom = (zoom / 1.4142).clamp(0.125, 8.0);
-            f.insert(ZOOM_FIELD.into(), json!(zoom));
+            let next = (effective_zoom / 1.4142).clamp(0.125, 8.0);
+            f.insert(ZOOM_FIELD.into(), json!(next));
             f.insert(FIT_FIELD.into(), json!(false));
         }
+
+        ui.label(RichText::new(format!("{:.0}%", effective_zoom * 100.0)).font(theme::mono(10.5)).color(SpkColors::SECONDARY));
+        ui.add_space(6.0);
+
+        // Quick hold-to-compare original button (works at any zoom without interfering with panning).
+        let compare_label = "按住看原图";
+        let cg = ui.painter().layout_no_wrap(compare_label.into(), theme::medium(10.5), SpkColors::TEXT);
+        let (c_rect, c_resp) = ui.allocate_exact_size(vec2(cg.size().x + 16.0, 22.0), Sense::click_and_drag());
+        let c_resp = c_resp
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text("按住不放可对比未经胶片模拟的原图（任意缩放倍率可用）");
+        c_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, fed.orig.is_some(), compare_label));
+        let holding_btn = fed.orig.is_some() && c_resp.is_pointer_button_down_on();
+        f.insert(HOLD_ORIG_FIELD.into(), json!(holding_btn));
+        let c_bg = if holding_btn {
+            SpkColors::ACCENT_SOFT
+        } else if c_resp.hovered() {
+            SpkColors::PILL_HOVER
+        } else {
+            SpkColors::PILL
+        };
+        let c_fg = if holding_btn { SpkColors::ACCENT } else { SpkColors::TEXT };
+        ui.painter().rect_filled(c_rect, CornerRadius::same(99), c_bg);
+        if holding_btn {
+            ui.painter().rect_stroke(c_rect, CornerRadius::same(99), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
+        }
+        ui.painter().text(c_rect.center(), Align2::CENTER_CENTER, compare_label, theme::medium(10.5), c_fg);
     });
 }
 
@@ -1118,7 +1367,7 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
     let header_rect = Rect::from_min_size(rect.min, vec2(rect.width(), 34.0));
     {
         let mut h_ui = ui.new_child(egui::UiBuilder::new().max_rect(header_rect.shrink2(vec2(12.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        h_ui.label(RichText::new("胶片与印相 · Film & Print").font(theme::semibold(12.5)).color(SpkColors::TEXT));
+        h_ui.label(RichText::new("胶片与印相").font(theme::semibold(12.5)).color(SpkColors::TEXT));
         h_ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let mut auto_paper = f.get(AUTO_PAPER_FIELD).and_then(Value::as_bool).unwrap_or(true);
             if chip_button(ui, if auto_paper { "自动配纸 ✓" } else { "自动配纸" }, auto_paper)
@@ -1132,32 +1381,88 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
     }
     ui.painter().line_segment([pos2(rect.left(), header_rect.bottom()), pos2(rect.right(), header_rect.bottom())], Stroke::new(1.0, SpkColors::RULE));
 
-    // Category filter bar + search
-    let filter_rect = Rect::from_min_size(pos2(rect.left(), header_rect.bottom() + 1.0), vec2(rect.width(), 56.0));
+    // Equal-width category segmented bar + styled darkroom search input.
+    let filter_rect = Rect::from_min_size(pos2(rect.left(), header_rect.bottom() + 1.0), vec2(rect.width(), 64.0));
     {
-        let mut f_ui = ui.new_child(egui::UiBuilder::new().max_rect(filter_rect.shrink2(vec2(10.0, 4.0))));
+        let mut f_ui = ui.new_child(egui::UiBuilder::new().max_rect(filter_rect.shrink2(vec2(10.0, 5.0))));
         let cur_cat = f.get(FILTER_CAT_FIELD).and_then(Value::as_str).unwrap_or("all").to_string();
-        f_ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
-            for (cat, label) in [("all", "全部(22)"), ("negative", "负片(11)"), ("positive", "正片(4)"), ("cine", "电影(7)")] {
-                if chip_button(ui, label, cur_cat == cat).clicked() {
-                    f.insert(FILTER_CAT_FIELD.into(), json!(cat));
-                }
+        let avail_w = f_ui.available_width();
+        let (bar_r, _) = f_ui.allocate_exact_size(vec2(avail_w, 24.0), Sense::hover());
+        f_ui.painter().rect_filled(bar_r, CornerRadius::same(6), SpkColors::WELL);
+        f_ui.painter().rect_stroke(bar_r, CornerRadius::same(6), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
+        let cats = [("all", "全部 22"), ("negative", "负片 11"), ("positive", "正片 4"), ("cine", "电影 7")];
+        let seg_w = (bar_r.width() - 4.0) / cats.len() as f32;
+        for (i, (cat, label)) in cats.into_iter().enumerate() {
+            let r = Rect::from_min_size(pos2(bar_r.left() + 2.0 + i as f32 * seg_w, bar_r.top() + 2.0), vec2(seg_w, bar_r.height() - 4.0));
+            let active = cur_cat == cat;
+            let resp = f_ui
+                .interact(r, f_ui.scope_id().with(("cat", cat)), Sense::click())
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, active, label));
+            if active {
+                f_ui.painter().rect_filled(r, CornerRadius::same(4), SpkColors::ACCENT_SOFT);
+                f_ui.painter().rect_stroke(r, CornerRadius::same(4), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
+            } else if resp.hovered() {
+                f_ui.painter().rect_filled(r, CornerRadius::same(4), Color32::from_white_alpha(12));
             }
-        });
-        f_ui.add_space(4.0);
+            let fg = if active { SpkColors::ACCENT } else if resp.hovered() { SpkColors::TEXT } else { SpkColors::SECONDARY };
+            f_ui.painter().text(r.center(), Align2::CENTER_CENTER, label, theme::semibold(10.0), fg);
+            if resp.clicked() {
+                f.insert(FILTER_CAT_FIELD.into(), json!(cat));
+            }
+        }
+
+        f_ui.add_space(5.0);
         let mut search = f.get(SEARCH_FIELD).and_then(Value::as_str).unwrap_or_default().to_string();
-        let was_empty = search.is_empty();
-        f_ui.horizontal(|ui| {
-            let edit = egui::TextEdit::singleline(&mut search)
-                .hint_text("搜索胶片型号 (如 Portra, Velvia, 500T)…")
-                .desired_width(ui.available_width() - if was_empty { 0.0 } else { 24.0 })
-                .font(egui::FontId::proportional(11.5));
-            ui.add(edit);
-            if !search.is_empty() && ui.small_button("×").clicked() {
-                search.clear();
-            }
-        });
+        let focused_id = egui::Id::unique("spektra-search-focused");
+        let was_focused = f_ui.data(|d| d.get_temp::<bool>(focused_id).unwrap_or(false));
+        let enter_while_focused = was_focused
+            && f_ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+        let esc_while_focused = was_focused
+            && !search.is_empty()
+            && f_ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+        if esc_while_focused {
+            search.clear();
+        }
+        let border_col = if was_focused || !search.is_empty() { SpkColors::ACCENT_BORDER } else { SpkColors::RULE };
+        egui::Frame::NONE
+            .fill(SpkColors::WELL)
+            .stroke(Stroke::new(1.0, border_col))
+            .corner_radius(CornerRadius::same(6))
+            .inner_margin(Margin::symmetric(8, 3))
+            .show(&mut f_ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 5.0;
+                    let icon_col = if was_focused || !search.is_empty() { SpkColors::ACCENT } else { SpkColors::DIM };
+                    ui.label(RichText::new("⌕").font(theme::semibold(12.0)).color(icon_col));
+                    let clear_w = if search.is_empty() { 0.0 } else { 20.0 };
+                    let edit = egui::TextEdit::singleline(&mut search)
+                        .frame(egui::Frame::NONE)
+                        .hint_text("搜索胶片型号 (Portra / Velvia / 500T)…")
+                        .desired_width((ui.available_width() - clear_w).max(60.0))
+                        .font(egui::FontId::proportional(11.0));
+                    let edit_resp = ui.add(edit);
+                    if enter_while_focused || esc_while_focused {
+                        edit_resp.request_focus();
+                    }
+                    let has_focus = edit_resp.has_focus() || enter_while_focused || esc_while_focused;
+                    ui.data_mut(|d| d.insert_temp(focused_id, has_focus));
+                    if !search.is_empty() {
+                        let (cr, cresp) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::click());
+                        let cresp = cresp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("清空搜索");
+                        ui.painter().text(
+                            cr.center(),
+                            Align2::CENTER_CENTER,
+                            "×",
+                            theme::semibold(12.0),
+                            if cresp.hovered() { SpkColors::TEXT } else { SpkColors::DIM },
+                        );
+                        if cresp.clicked() {
+                            search.clear();
+                        }
+                    }
+                });
+            });
         if search.is_empty() {
             f.remove(SEARCH_FIELD);
         } else {
@@ -1175,12 +1480,11 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
         .show(&mut s_ui, |ui| {
             ui.add_space(6.0);
             let cur_cat = f.get(FILTER_CAT_FIELD).and_then(Value::as_str).unwrap_or("all").to_string();
-            let query = f.get(SEARCH_FIELD).and_then(Value::as_str).unwrap_or_default().to_ascii_lowercase();
+            let query = f.get(SEARCH_FIELD).and_then(Value::as_str).unwrap_or_default().to_lowercase();
             let auto_paper = f.get(AUTO_PAPER_FIELD).and_then(Value::as_bool).unwrap_or(true);
             let mut selected_film = f.get("film").and_then(Value::as_str).unwrap_or("kodak_portra_400").to_string();
 
-            // Section: Film
-            section_header(ui, "▾  胶片 · Film", Some(&format!("{}", FILM_STOCKS.len())));
+            section_header(ui, "▾  胶片型号", Some(&format!("{} 款", FILM_STOCKS.len())));
 
             let matches_filter = |s: &FilmStockInfo| -> bool {
                 let cat_ok = match cur_cat.as_str() {
@@ -1190,8 +1494,9 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
                     _ => true,
                 };
                 let q_ok = query.is_empty()
-                    || s.name.to_ascii_lowercase().contains(&query)
-                    || s.id.to_ascii_lowercase().contains(&query)
+                    || s.name.to_lowercase().contains(&query)
+                    || s.short_name.to_lowercase().contains(&query)
+                    || s.id.to_lowercase().contains(&query)
                     || s.cn_tag.to_lowercase().contains(&query);
                 cat_ok && q_ok
             };
@@ -1199,8 +1504,8 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
             // Group 1: Positive
             let positives: Vec<&FilmStockInfo> = FILM_STOCKS.iter().filter(|s| s.polarity == Polarity::Positive && matches_filter(s)).collect();
             if !positives.is_empty() {
-                stock_group_header(ui, "Positive · 彩色反转正片");
-                for stock in positives {
+                stock_group_header(ui, "彩色反转正片");
+                for stock in positives.iter().copied() {
                     if draw_film_row(ui, stock, selected_film == stock.id) {
                         selected_film = stock.id.to_string();
                         f.insert("film".into(), json!(stock.id));
@@ -1211,8 +1516,8 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
             // Group 2: Negative (Still + Cine)
             let negatives: Vec<&FilmStockInfo> = FILM_STOCKS.iter().filter(|s| s.polarity == Polarity::Negative && matches_filter(s)).collect();
             if !negatives.is_empty() {
-                stock_group_header(ui, "Negative · 彩色负片与电影胶片");
-                for stock in negatives {
+                stock_group_header(ui, "彩色负片与电影胶片");
+                for stock in negatives.iter().copied() {
                     if draw_film_row(ui, stock, selected_film == stock.id) {
                         selected_film = stock.id.to_string();
                         f.insert("film".into(), json!(stock.id));
@@ -1222,6 +1527,21 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
                         }
                     }
                 }
+            }
+
+            if positives.is_empty() && negatives.is_empty() {
+                ui.add_space(28.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(RichText::new("未找到匹配胶片").font(theme::semibold(11.5)).color(SpkColors::SECONDARY));
+                    ui.add_space(4.0);
+                    ui.label(RichText::new("试试 Portra · Velvia · 500T").font(theme::medium(10.0)).color(SpkColors::DIM));
+                    if !query.is_empty() {
+                        ui.add_space(6.0);
+                        if chip_button(ui, "清空搜索", false).clicked() {
+                            f.remove(SEARCH_FIELD);
+                        }
+                    }
+                });
             }
 
             ui.add_space(10.0);
@@ -1235,7 +1555,7 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
             let selected_paper = f.get("paper").and_then(Value::as_str).unwrap_or("kodak_portra_endura").to_string();
             section_header(
                 ui,
-                "▾  印相介质 · Print & Scan",
+                "▾  印相介质",
                 Some(if is_positive {
                     "正片透射直扫"
                 } else if print_chain {
@@ -1245,7 +1565,7 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
                 }),
             );
 
-            stock_group_header(ui, "Still Paper · 暗房银盐相纸（胶片观感）");
+            stock_group_header(ui, "暗房银盐相纸（胶片观感）");
             ui.add_enabled_ui(!is_positive, |ui| {
                 for paper in PAPER_STOCKS {
                     let is_sel = effective_print && selected_paper == paper.id;
@@ -1259,9 +1579,9 @@ fn draw_left_rail(ui: &mut Ui, f: &mut Map<String, Value>) {
             stock_group_header(
                 ui,
                 if is_positive {
-                    "Positive Slide · 正片透射直扫（自动启用）"
+                    "正片透射直扫（自动启用）"
                 } else {
-                    "Direct Scan · 负片原始直扫（无相纸）"
+                    "负片原始直扫（无相纸）"
                 },
             );
             if draw_direct_scan_row(ui, !effective_print, is_positive) && !is_positive {
@@ -1276,44 +1596,59 @@ fn draw_film_row(ui: &mut Ui, stock: &FilmStockInfo, selected: bool) -> bool {
     let mut clicked = false;
     ui.horizontal(|ui| {
         ui.add_space(8.0);
-        let (rect, resp) = ui.allocate_exact_size(vec2(avail_w, 24.0), Sense::click());
+        let (rect, resp) = ui.allocate_exact_size(vec2(avail_w, 38.0), Sense::click());
         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, selected, stock.name));
         let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(format!("{} — {}", stock.name, stock.cn_tag));
         if selected {
-            ui.painter().rect_filled(rect, CornerRadius::same(7), SpkColors::SELECTION);
+            ui.painter().rect_filled(rect, CornerRadius::same(7), SpkColors::ACCENT_SOFT);
+            ui.painter().rect_stroke(rect, CornerRadius::same(7), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
+            let stripe = Rect::from_min_size(pos2(rect.left() + 3.0, rect.center().y - 10.0), vec2(2.5, 20.0));
+            ui.painter().rect_filled(stripe, CornerRadius::same(1), SpkColors::ACCENT);
         } else if resp.hovered() {
-            ui.painter().rect_filled(rect, CornerRadius::same(7), Color32::from_white_alpha(15));
+            ui.painter().rect_filled(rect, CornerRadius::same(7), Color32::from_white_alpha(14));
+            ui.painter().rect_stroke(rect, CornerRadius::same(7), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
         }
 
-        let text_color = if selected { SpkColors::ON_SELECTION } else { SpkColors::TEXT };
-        // Right side: 18x18 cover icon, and optional CINE pill before it
-        let cover_rect = Rect::from_min_size(pos2(rect.right() - 22.0, rect.center().y - 9.0), vec2(18.0, 18.0));
+        // Left thumbnail (26x26)
+        let cover_rect = Rect::from_min_size(pos2(rect.left() + 10.0, rect.center().y - 13.0), vec2(26.0, 26.0));
         draw_stock_cover(ui, cover_rect, stock);
 
-        let mut right_limit = cover_rect.left() - 6.0;
+        // Optional CINE pill on the right
+        let mut right_limit = rect.right() - 8.0;
         if stock.is_cine {
-            let cine_rect = Rect::from_min_size(pos2(right_limit - 30.0, rect.center().y - 6.5), vec2(28.0, 13.0));
-            let cine_color = if selected { Color32::from_rgb(176, 108, 24) } else { SpkColors::ACCENT };
+            let cine_rect = Rect::from_min_size(pos2(right_limit - 30.0, rect.center().y - 7.0), vec2(28.0, 14.0));
+            let cine_color = SpkColors::ACCENT;
+            ui.painter().rect_filled(cine_rect, CornerRadius::same(4), Color32::from_rgba_unmultiplied(225, 169, 95, 22));
             ui.painter().rect_stroke(cine_rect, CornerRadius::same(4), Stroke::new(1.0, cine_color), StrokeKind::Inside);
             ui.painter().text(cine_rect.center(), Align2::CENTER_CENTER, "CINE", theme::semibold(8.5), cine_color);
-            right_limit = cine_rect.left() - 5.0;
+            right_limit = cine_rect.left() - 6.0;
         }
 
-        // Stock name clipped to `right_limit`
-        let text_rect = Rect::from_min_max(pos2(rect.left() + 8.0, rect.top()), pos2(right_limit, rect.bottom()));
+        // Two-line stock info clipped cleanly between thumbnail and right limit
+        let text_rect = Rect::from_min_max(pos2(cover_rect.right() + 9.0, rect.top() + 2.0), pos2(right_limit, rect.bottom() - 2.0));
         let painter = ui.painter().with_clip_rect(text_rect);
+        let name_col = SpkColors::TEXT;
+        let tag_col = if selected { SpkColors::ACCENT } else { SpkColors::DIM };
         painter.text(
-            pos2(text_rect.left(), text_rect.center().y),
+            pos2(text_rect.left(), rect.center().y - 6.5),
             Align2::LEFT_CENTER,
-            stock.name,
+            stock.short_name,
             theme::semibold(11.5),
-            text_color,
+            name_col,
+        );
+        painter.text(
+            pos2(text_rect.left(), rect.center().y + 7.0),
+            Align2::LEFT_CENTER,
+            stock.cn_tag,
+            theme::medium(9.5),
+            tag_col,
         );
 
         if resp.clicked() {
             clicked = true;
         }
     });
+    ui.add_space(2.0);
     clicked
 }
 
@@ -1321,15 +1656,15 @@ fn draw_stock_cover(ui: &mut Ui, rect: Rect, stock: &FilmStockInfo) {
     if let Some(tex) = cover_texture(ui.ctx(), stock) {
         let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
         ui.painter().image(tex.id(), rect, uv, Color32::WHITE);
-        ui.painter().rect_stroke(rect, CornerRadius::same(2), Stroke::new(0.5, Color32::from_black_alpha(90)), StrokeKind::Inside);
+        ui.painter().rect_stroke(rect, CornerRadius::same(3), Stroke::new(0.8, Color32::from_black_alpha(110)), StrokeKind::Inside);
     } else {
-        // Stylized two-tone film box badge for stocks without an embedded JPG
         let top_h = rect.height() * 0.68;
         let top_r = Rect::from_min_size(rect.min, vec2(rect.width(), top_h));
         let bot_r = Rect::from_min_max(pos2(rect.left(), rect.top() + top_h), rect.max);
-        ui.painter().rect_filled(top_r, CornerRadius { nw: 2, ne: 2, sw: 0, se: 0 }, stock.badge_colors[0]);
-        ui.painter().rect_filled(bot_r, CornerRadius { nw: 0, ne: 0, sw: 2, se: 2 }, stock.badge_colors[1]);
-        ui.painter().text(top_r.center(), Align2::CENTER_CENTER, stock.badge_text, theme::semibold(6.5), Color32::WHITE);
+        ui.painter().rect_filled(top_r, CornerRadius { nw: 3, ne: 3, sw: 0, se: 0 }, stock.badge_colors[0]);
+        ui.painter().rect_filled(bot_r, CornerRadius { nw: 0, ne: 0, sw: 3, se: 3 }, stock.badge_colors[1]);
+        ui.painter().rect_stroke(rect, CornerRadius::same(3), Stroke::new(0.8, Color32::from_black_alpha(110)), StrokeKind::Inside);
+        ui.painter().text(top_r.center(), Align2::CENTER_CENTER, stock.badge_text, theme::semibold(7.0), Color32::WHITE);
     }
 }
 
@@ -1339,7 +1674,7 @@ fn draw_paper_row(ui: &mut Ui, paper: &PaperStockInfo, selected: bool) -> bool {
     let mut clicked = false;
     ui.horizontal(|ui| {
         ui.add_space(8.0);
-        let (rect, resp) = ui.allocate_exact_size(vec2(avail_w, 23.0), Sense::click());
+        let (rect, resp) = ui.allocate_exact_size(vec2(avail_w, 34.0), Sense::click());
         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, enabled, selected, paper.name));
         let resp = if enabled {
             resp.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -1349,34 +1684,37 @@ fn draw_paper_row(ui: &mut Ui, paper: &PaperStockInfo, selected: bool) -> bool {
         .on_hover_text(format!("{} — {}", paper.name, paper.cn_tag))
         .on_disabled_hover_text("彩色反转正片本身已是正像，无需经暗房相纸二次反相；切换负片/电影胶片后可选相纸");
         if selected {
-            ui.painter().rect_filled(rect, CornerRadius::same(7), SpkColors::SELECTION);
+            ui.painter().rect_filled(rect, CornerRadius::same(7), SpkColors::ACCENT_SOFT);
+            ui.painter().rect_stroke(rect, CornerRadius::same(7), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
+            let stripe = Rect::from_min_size(pos2(rect.left() + 3.0, rect.center().y - 9.0), vec2(2.5, 18.0));
+            ui.painter().rect_filled(stripe, CornerRadius::same(1), SpkColors::ACCENT);
         } else if enabled && resp.hovered() {
-            ui.painter().rect_filled(rect, CornerRadius::same(7), Color32::from_white_alpha(15));
+            ui.painter().rect_filled(rect, CornerRadius::same(7), Color32::from_white_alpha(14));
+            ui.painter().rect_stroke(rect, CornerRadius::same(7), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
         }
-        let text_color = if !enabled {
+
+        // Paper swatch pill on left
+        let swatch = Rect::from_min_size(pos2(rect.left() + 11.0, rect.center().y - 10.0), vec2(20.0, 20.0));
+        ui.painter().rect_filled(swatch, CornerRadius::same(3), paper.badge_colors[0]);
+        ui.painter().rect_stroke(swatch, CornerRadius::same(3), Stroke::new(1.0, paper.badge_colors[1]), StrokeKind::Inside);
+
+        let text_color = if !enabled { SpkColors::DIM } else { SpkColors::TEXT };
+        let sub_color = if !enabled {
             SpkColors::DIM
         } else if selected {
-            SpkColors::ON_SELECTION
+            SpkColors::ACCENT
         } else {
-            SpkColors::TEXT
+            SpkColors::DIM
         };
-        // Paper swatch pill on right
-        let swatch = Rect::from_min_size(pos2(rect.right() - 20.0, rect.center().y - 6.0), vec2(14.0, 12.0));
-        ui.painter().rect_filled(swatch, CornerRadius::same(2), paper.badge_colors[0]);
-        ui.painter().rect_stroke(swatch, CornerRadius::same(2), Stroke::new(1.0, paper.badge_colors[1]), StrokeKind::Inside);
-
-        let text_rect = Rect::from_min_max(pos2(rect.left() + 8.0, rect.top()), pos2(swatch.left() - 6.0, rect.bottom()));
-        ui.painter().with_clip_rect(text_rect).text(
-            pos2(text_rect.left(), text_rect.center().y),
-            Align2::LEFT_CENTER,
-            paper.name,
-            theme::semibold(11.0),
-            text_color,
-        );
+        let text_rect = Rect::from_min_max(pos2(swatch.right() + 9.0, rect.top() + 2.0), pos2(rect.right() - 8.0, rect.bottom() - 2.0));
+        let painter = ui.painter().with_clip_rect(text_rect);
+        painter.text(pos2(text_rect.left(), rect.center().y - 6.0), Align2::LEFT_CENTER, paper.short_name, theme::semibold(11.0), text_color);
+        painter.text(pos2(text_rect.left(), rect.center().y + 6.5), Align2::LEFT_CENTER, paper.cn_tag, theme::medium(9.0), sub_color);
         if resp.clicked() {
             clicked = true;
         }
     });
+    ui.add_space(2.0);
     clicked
 }
 
@@ -1385,33 +1723,42 @@ fn draw_direct_scan_row(ui: &mut Ui, selected: bool, is_positive: bool) -> bool 
     let mut clicked = false;
     ui.horizontal(|ui| {
         ui.add_space(8.0);
-        let (label, tip) = if is_positive {
+        let (label, sub, glyph, tip) = if is_positive {
             (
-                "正片透射直扫 · Slide Positive Scan",
+                "正片透射直扫",
+                "跳过负片相纸反相 · 正像直出",
+                "S",
                 "正片/反转片（Velvia / Provia / Ektachrome / Kodachrome）显影后已是正像，自动采用正片透射直扫",
             )
         } else {
             (
-                "不使用相纸配置 (负片直扫 · Direct Scan)",
+                "负片直扫（不使用相纸）",
+                "保留原始橙色色罩 · 仅供研究",
+                "D",
                 "跳过放大机与相纸显影，直接输出胶片密度扫描（负片将保留原始橙色色罩，仅供研究或外置反转）",
             )
         };
-        let (rect, resp) = ui.allocate_exact_size(vec2(avail_w, 23.0), Sense::click());
+        let (rect, resp) = ui.allocate_exact_size(vec2(avail_w, 34.0), Sense::click());
         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, selected, label));
         let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip);
         if selected {
-            ui.painter().rect_filled(rect, CornerRadius::same(7), SpkColors::SELECTION);
+            ui.painter().rect_filled(rect, CornerRadius::same(7), SpkColors::ACCENT_SOFT);
+            ui.painter().rect_stroke(rect, CornerRadius::same(7), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
+            let stripe = Rect::from_min_size(pos2(rect.left() + 3.0, rect.center().y - 9.0), vec2(2.5, 18.0));
+            ui.painter().rect_filled(stripe, CornerRadius::same(1), SpkColors::ACCENT);
         } else if resp.hovered() {
-            ui.painter().rect_filled(rect, CornerRadius::same(7), Color32::from_white_alpha(15));
+            ui.painter().rect_filled(rect, CornerRadius::same(7), Color32::from_white_alpha(14));
+            ui.painter().rect_stroke(rect, CornerRadius::same(7), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
         }
-        let text_color = if selected { SpkColors::ON_SELECTION } else { SpkColors::SECONDARY };
-        ui.painter().text(
-            pos2(rect.left() + 8.0, rect.center().y),
-            Align2::LEFT_CENTER,
-            label,
-            theme::semibold(11.0),
-            text_color,
-        );
+        let icon_r = Rect::from_min_size(pos2(rect.left() + 11.0, rect.center().y - 10.0), vec2(20.0, 20.0));
+        ui.painter().rect_filled(icon_r, CornerRadius::same(3), SpkColors::PILL);
+        ui.painter().rect_stroke(icon_r, CornerRadius::same(3), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
+        ui.painter().text(icon_r.center(), Align2::CENTER_CENTER, glyph, theme::semibold(10.0), if selected { SpkColors::ACCENT } else { SpkColors::SECONDARY });
+
+        let text_rect = Rect::from_min_max(pos2(icon_r.right() + 9.0, rect.top() + 2.0), pos2(rect.right() - 8.0, rect.bottom() - 2.0));
+        let painter = ui.painter().with_clip_rect(text_rect);
+        painter.text(pos2(text_rect.left(), rect.center().y - 6.0), Align2::LEFT_CENTER, label, theme::semibold(11.0), SpkColors::TEXT);
+        painter.text(pos2(text_rect.left(), rect.center().y + 6.5), Align2::LEFT_CENTER, sub, theme::medium(9.0), if selected { SpkColors::ACCENT } else { SpkColors::DIM });
         if resp.clicked() {
             clicked = true;
         }
@@ -1424,12 +1771,12 @@ fn draw_direct_scan_row(ui: &mut Ui, selected: bool, is_positive: bool) -> bool 
 // ---------------------------------------------------------------------------
 
 fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut Map<String, Value>) -> ScopeStats {
-    let footer_h = 28.0;
+    let footer_h = 30.0;
     let canvas_rect = Rect::from_min_max(center_rect.min, pos2(center_rect.right(), (center_rect.bottom() - footer_h).max(center_rect.top() + 80.0)));
     let footer_rect = Rect::from_min_max(pos2(center_rect.left(), canvas_rect.bottom()), center_rect.max);
 
-    ui.painter().rect_filled(canvas_rect, CornerRadius::ZERO, SpkColors::GROUND);
-    ui.painter().rect_filled(footer_rect, CornerRadius::ZERO, SpkColors::WELL);
+    ui.painter().rect_filled(canvas_rect, CornerRadius::ZERO, SpkColors::SURROUND);
+    ui.painter().rect_filled(footer_rect, CornerRadius::ZERO, SpkColors::HEADER);
     ui.painter().line_segment([pos2(footer_rect.left(), footer_rect.top()), pos2(footer_rect.right(), footer_rect.top())], Stroke::new(1.0, SpkColors::RULE));
 
     let cur_film_id = f.get("film").and_then(Value::as_str).unwrap_or("kodak_portra_400");
@@ -1440,36 +1787,48 @@ fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut 
     let is_positive = film_info.polarity == Polarity::Positive;
     let effective_print = print_chain && !is_positive;
 
-    // Draw pipeline status footer
-    let pipe_desc = if is_positive {
-        format!(
-            "正片管线: D55 入射 (380–780nm @ 5nm)  →  {} ({})  →  D50 正片透射直扫 sRGB",
-            film_info.name, film_info.cn_tag
-        )
-    } else if effective_print {
-        format!(
-            "光谱管线: D55 入射 (380–780nm @ 5nm)  →  {} ({})  →  TH-KG3 放大机 + {}  →  D50 扫描 sRGB",
-            film_info.name, film_info.cn_tag, paper_info.short_name
-        )
-    } else {
-        format!(
-            "直扫管线: D55 入射 (380–780nm @ 5nm)  →  {} ({})  →  D50 负片直扫 (无相纸)",
-            film_info.name, film_info.cn_tag
-        )
-    };
-    ui.painter().with_clip_rect(footer_rect.shrink2(vec2(10.0, 0.0))).text(
-        pos2(footer_rect.left() + 12.0, footer_rect.center().y),
-        Align2::LEFT_CENTER,
-        pipe_desc,
-        theme::medium(11.0),
-        SpkColors::SECONDARY,
-    );
-
     let base_k = fed.base_k.max(1);
     let orig = fed.orig.clone();
     let filt = fed.filt.clone();
+    let mode = f.get(VIEW_MODE_FIELD).and_then(Value::as_str).unwrap_or("process").to_string();
+    let preview_on = f.get("__preview").and_then(Value::as_bool).unwrap_or(true);
 
-    let active_stats = filt.as_ref().or(orig.as_ref()).map(|c| c.stats.clone()).unwrap_or_default();
+    // Status pill on the right side of the footer (never obscures the subject).
+    let (status_label, status_dot) = if !preview_on {
+        ("预览已暂停", SpkColors::DIM)
+    } else if fed.computing || (preview_on && filt.is_none() && orig.is_some()) {
+        ("正在光谱显影…", SpkColors::ACCENT)
+    } else {
+        ("就绪", SpkColors::READY_DOT)
+    };
+    let st_galley = ui.painter().layout_no_wrap(status_label.into(), theme::medium(10.0), SpkColors::SECONDARY);
+    let status_w = st_galley.size().x + 28.0;
+    let status_rect = Rect::from_min_max(pos2((footer_rect.right() - status_w - 8.0).max(footer_rect.left()), footer_rect.top()), footer_rect.max);
+    ui.painter().circle_filled(pos2(status_rect.left() + 8.0, status_rect.center().y), 3.5, status_dot);
+    ui.painter().text(pos2(status_rect.left() + 17.0, status_rect.center().y), Align2::LEFT_CENTER, status_label, theme::medium(10.0), SpkColors::SECONDARY);
+
+    let proxy_note = if base_k > 1 { format!(" · 1/{base_k}x 预览") } else { String::new() };
+    let pipe_desc = if is_positive {
+        format!("{}  →  正片透射直扫 · D50 / sRGB{proxy_note}", film_info.short_name)
+    } else if effective_print {
+        format!("{}  →  TH-KG3 + {} · D50 / sRGB{proxy_note}", film_info.short_name, paper_info.short_name)
+    } else {
+        format!("{}  →  负片直扫 · 保留橙罩{proxy_note}", film_info.short_name)
+    };
+    let pipe_clip = Rect::from_min_max(pos2(footer_rect.left() + 10.0, footer_rect.top()), pos2((status_rect.left() - 6.0).max(footer_rect.left() + 10.0), footer_rect.bottom()));
+    ui.painter().with_clip_rect(pipe_clip).text(
+        pos2(pipe_clip.left(), footer_rect.center().y),
+        Align2::LEFT_CENTER,
+        pipe_desc,
+        theme::medium(10.5),
+        SpkColors::SECONDARY,
+    );
+
+    let active_stats = if mode == "original" {
+        orig.as_ref().map(|c| c.stats.clone()).unwrap_or_default()
+    } else {
+        filt.as_ref().or(orig.as_ref()).map(|c| c.stats.clone()).unwrap_or_default()
+    };
     let Some([img_w, img_h]) = filt.as_ref().map(|c| c.size).or_else(|| orig.as_ref().map(|c| c.size)) else {
         return active_stats;
     };
@@ -1481,9 +1840,10 @@ fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut 
     let doc_h = (img_h as f32 * base_k as f32).max(1.0);
 
     let fit = f.get(FIT_FIELD).and_then(Value::as_bool).unwrap_or(true);
-    let pad = 20.0;
+    let pad = 22.0;
     let inner_avail = (canvas_rect.size() - vec2(pad * 2.0, pad * 2.0)).max(vec2(64.0, 64.0));
     let fit_zoom = (inner_avail.x / doc_w).min(inner_avail.y / doc_h).clamp(0.05, 8.0);
+    f.insert(FIT_ZOOM_FIELD.into(), json!(fit_zoom));
 
     let mut zoom = if fit {
         fit_zoom
@@ -1500,7 +1860,6 @@ fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut 
     let mut sub_ui = ui.new_child(egui::UiBuilder::new().max_rect(canvas_rect));
     let (_, response) = sub_ui.allocate_exact_size(canvas_rect.size(), Sense::click_and_drag());
 
-    // Compute destination rect & UV
     let sw = canvas_rect.width() / zoom;
     let sh = canvas_rect.height() / zoom;
     let x0 = if sw >= doc_w { (doc_w - sw) * 0.5 } else { (cx - sw * 0.5).clamp(0.0, doc_w - sw) };
@@ -1514,45 +1873,50 @@ fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut 
     let uv = Rect::from_min_max(pos2(vx0 / doc_w, vy0 / doc_h), pos2(vx1 / doc_w, vy1 / doc_h));
 
     let painter = ui.painter_at(canvas_rect);
-    // Subtle dark drop frame around the image
-    painter.rect_filled(dest.expand(2.0), CornerRadius::same(2), SpkColors::WELL);
+    // Subtle dark drop shadow + dark mat frame around photograph
+    painter.rect_filled(dest.expand(4.0).translate(vec2(0.0, 2.0)), CornerRadius::same(3), Color32::from_black_alpha(72));
+    painter.rect_filled(dest.expand(1.5), CornerRadius::same(2), SpkColors::WELL);
     draw_checker(&painter, dest, 8.0);
 
-    let mode = f.get(VIEW_MODE_FIELD).and_then(Value::as_str).unwrap_or("process").to_string();
     let mut split_pos = f.get(SPLIT_POS_FIELD).and_then(Value::as_f64).map(|v| v as f32).unwrap_or(0.5).clamp(0.05, 0.95);
+    let hold_btn = f.get(HOLD_ORIG_FIELD).and_then(Value::as_bool).unwrap_or(false);
 
-    if mode == "split" {
+    if mode == "split" && !hold_btn {
         let split_x = dest.left() + dest.width() * split_pos;
+        let left_clip = Rect::from_min_max(canvas_rect.min, pos2(split_x, canvas_rect.bottom()));
+        let right_clip = Rect::from_min_max(pos2(split_x, canvas_rect.top()), canvas_rect.max);
         if let Some(o) = &orig {
-            let left_clip = Rect::from_min_max(canvas_rect.min, pos2(split_x, canvas_rect.bottom()));
             painter.with_clip_rect(left_clip).image(o.tex.id(), dest, uv, Color32::WHITE);
         }
         if let Some(fl) = filt.as_ref().or(orig.as_ref()) {
-            let right_clip = Rect::from_min_max(pos2(split_x, canvas_rect.top()), canvas_rect.max);
             painter.with_clip_rect(right_clip).image(fl.tex.id(), dest, uv, Color32::WHITE);
         }
-        // Draw SpektraLab `.compare-line` and `.compare-handle`
+
+        // High-visibility dual-stroke divider + circular drag puck
+        painter.line_segment([pos2(split_x, dest.top()), pos2(split_x, dest.bottom())], Stroke::new(3.0, Color32::from_black_alpha(140)));
         painter.line_segment([pos2(split_x, dest.top()), pos2(split_x, dest.bottom())], Stroke::new(1.5, Color32::from_rgb(250, 248, 244)));
-        let handle_rect = Rect::from_center_size(pos2(split_x, dest.center().y), vec2(14.0, 28.0));
-        painter.rect_filled(handle_rect, CornerRadius::same(7), Color32::from_rgb(250, 248, 244));
-        painter.line_segment(
-            [pos2(split_x - 2.0, handle_rect.center().y - 5.0), pos2(split_x - 2.0, handle_rect.center().y + 5.0)],
-            Stroke::new(1.0, SpkColors::WELL),
-        );
-        painter.line_segment(
-            [pos2(split_x + 2.0, handle_rect.center().y - 5.0), pos2(split_x + 2.0, handle_rect.center().y + 5.0)],
-            Stroke::new(1.0, SpkColors::WELL),
-        );
+        let handle_center = pos2(split_x, dest.center().y);
+        painter.circle_filled(handle_center, 11.0, Color32::from_rgb(250, 248, 244));
+        painter.circle_stroke(handle_center, 11.0, Stroke::new(1.0, Color32::from_black_alpha(120)));
+        painter.text(handle_center, Align2::CENTER_CENTER, "‹›", theme::semibold(10.0), SpkColors::WELL);
 
-        // Floating labels
-        let badge_l = Rect::from_min_size(pos2(dest.left() + 8.0, dest.top() + 8.0), vec2(68.0, 18.0));
-        painter.rect_filled(badge_l, CornerRadius::same(4), Color32::from_black_alpha(150));
-        painter.text(badge_l.center(), Align2::CENTER_CENTER, "原图 Original", theme::medium(10.0), SpkColors::TEXT);
+        // Bottom-corner frosted badges clipped to their respective halves so they never collide with the top-right histogram or each other.
+        let badge_l = Rect::from_min_size(pos2(dest.left() + 8.0, (dest.bottom() - 26.0).max(dest.top() + 8.0)), vec2(44.0, 18.0));
+        let lp = painter.with_clip_rect(left_clip.intersect(dest));
+        lp.rect_filled(badge_l, CornerRadius::same(4), Color32::from_black_alpha(168));
+        lp.text(badge_l.center(), Align2::CENTER_CENTER, "原图", theme::medium(10.0), SpkColors::TEXT);
 
-        let badge_r = Rect::from_min_size(pos2((split_x + 8.0).min(dest.right() - 84.0), dest.top() + 8.0), vec2(80.0, 18.0));
-        painter.rect_filled(badge_r, CornerRadius::same(4), Color32::from_black_alpha(150));
-        painter.text(badge_r.center(), Align2::CENTER_CENTER, "显影 Processed", theme::medium(10.0), SpkColors::ACCENT);
+        let badge_r = Rect::from_min_size(pos2(dest.right() - 52.0, (dest.bottom() - 26.0).max(dest.top() + 8.0)), vec2(44.0, 18.0));
+        let rp = painter.with_clip_rect(right_clip.intersect(dest));
+        rp.rect_filled(badge_r, CornerRadius::same(4), Color32::from_black_alpha(168));
+        rp.text(badge_r.center(), Align2::CENTER_CENTER, "显影", theme::medium(10.0), SpkColors::ACCENT);
 
+        if response.hovered()
+            && let Some(p) = response.hover_pos()
+            && (p.x - split_x).abs() <= 14.0
+        {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        }
         if (response.dragged() || response.clicked())
             && let Some(p) = response.interact_pointer_pos()
             && dest.width() > 1.0
@@ -1561,18 +1925,21 @@ fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut 
             f.insert(SPLIT_POS_FIELD.into(), json!(split_pos));
         }
     } else {
-        let holding = response.is_pointer_button_down_on() && !response.dragged();
-        let show_orig = mode == "original" || holding;
+        // Hold-on-canvas compare only activates when Fit is active (no panning); zoomed views use "按住看原图".
+        let canvas_hold = fit && response.is_pointer_button_down_on() && !response.dragged();
+        let show_orig = mode == "original" || hold_btn || canvas_hold;
         let shown = if show_orig { orig.as_ref() } else { filt.as_ref().or(orig.as_ref()) };
         if let Some(c) = shown {
             painter.image(c.tex.id(), dest, uv, Color32::WHITE);
         }
         if show_orig {
-            let badge = Rect::from_min_size(pos2(dest.left() + 8.0, dest.top() + 8.0), vec2(78.0, 19.0));
-            painter.rect_filled(badge, CornerRadius::same(4), Color32::from_black_alpha(165));
-            painter.text(badge.center(), Align2::CENTER_CENTER, "原图 Original", theme::semibold(10.0), SpkColors::ACCENT);
+            let badge = Rect::from_min_size(pos2(dest.left() + 8.0, (dest.bottom() - 26.0).max(dest.top() + 8.0)), vec2(48.0, 18.0));
+            painter.rect_filled(badge, CornerRadius::same(4), Color32::from_black_alpha(170));
+            painter.rect_stroke(badge, CornerRadius::same(4), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
+            painter.text(badge.center(), Align2::CENTER_CENTER, "原图", theme::semibold(10.0), SpkColors::ACCENT);
         }
         if response.dragged() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             let d = response.drag_delta();
             cx = (cx - d.x / zoom).clamp(0.0, doc_w);
             cy = (cy - d.y / zoom).clamp(0.0, doc_h);
@@ -1580,6 +1947,8 @@ fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut 
             f.insert(ZOOM_FIELD.into(), json!(zoom));
             f.insert(CENTER_X_FIELD.into(), json!(cx));
             f.insert(CENTER_Y_FIELD.into(), json!(cy));
+        } else if !fit && response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
         }
     }
 
@@ -1596,9 +1965,9 @@ fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut 
         }
     }
 
-    // Top-right corner RGB Histogram Overlay (`168 x 62`, exact match to `linux-real-host-cr2.png`)
-    let hist_w = 168.0;
-    let hist_h = 56.0;
+    // Top-right corner RGB Histogram HUD (176 x 62)
+    let hist_w = 176.0;
+    let hist_h = 62.0;
     let hist_rect = Rect::from_min_size(pos2(canvas_rect.right() - hist_w - 10.0, canvas_rect.top() + 8.0), vec2(hist_w, hist_h));
     draw_corner_histogram(&painter, hist_rect, &active_stats);
 
@@ -1606,10 +1975,16 @@ fn draw_center_canvas(fed: &FedPreview, ui: &mut Ui, center_rect: Rect, f: &mut 
 }
 
 fn draw_corner_histogram(painter: &egui::Painter, rect: Rect, stats: &ScopeStats) {
-    painter.rect_filled(rect, CornerRadius::same(4), Color32::from_rgba_unmultiplied(24, 25, 24, 195));
-    painter.rect_stroke(rect, CornerRadius::same(4), Stroke::new(1.0, Color32::from_white_alpha(28)), StrokeKind::Inside);
+    painter.rect_filled(rect, CornerRadius::same(6), Color32::from_rgba_unmultiplied(20, 21, 20, 215));
+    painter.rect_stroke(rect, CornerRadius::same(6), Stroke::new(1.0, Color32::from_white_alpha(30)), StrokeKind::Inside);
+    painter.text(pos2(rect.left() + 8.0, rect.top() + 9.0), Align2::LEFT_CENTER, "RGB · LUMA", theme::semibold(8.5), SpkColors::DIM);
+    painter.text(pos2(rect.right() - 8.0, rect.top() + 9.0), Align2::RIGHT_CENTER, "sRGB", theme::mono(8.5), SpkColors::ACCENT);
 
-    let plot = rect.shrink2(vec2(5.0, 5.0));
+    let plot = Rect::from_min_max(pos2(rect.left() + 7.0, rect.top() + 17.0), pos2(rect.right() - 7.0, rect.bottom() - 7.0));
+    for frac in [0.25f32, 0.5, 0.75] {
+        let gx = plot.left() + plot.width() * frac;
+        painter.line_segment([pos2(gx, plot.top()), pos2(gx, plot.bottom())], Stroke::new(0.5, Color32::from_white_alpha(16)));
+    }
     let n = 64;
     for (bins, col) in [
         (&stats.hist_y, SpkColors::HIST_Y),
@@ -1618,20 +1993,24 @@ fn draw_corner_histogram(painter: &egui::Painter, rect: Rect, stats: &ScopeStats
         (&stats.hist_b, SpkColors::HIST_B),
     ] {
         let mut pts = Vec::with_capacity(n);
+        let mut mesh = egui::Mesh::default();
+        let fill_top = Color32::from_rgba_unmultiplied(col.r(), col.g(), col.b(), 34);
+        let fill_bot = Color32::from_rgba_unmultiplied(col.r(), col.g(), col.b(), 6);
         for (i, &v) in bins.iter().enumerate() {
             let x = plot.left() + (i as f32 / (n - 1) as f32) * plot.width();
             let y = plot.bottom() - v.clamp(0.0, 1.0) * plot.height();
             pts.push(pos2(x, y));
+            let base_idx = (i * 2) as u32;
+            mesh.colored_vertex(pos2(x, plot.bottom()), fill_bot);
+            mesh.colored_vertex(pos2(x, y), fill_top);
+            if i > 0 {
+                mesh.add_triangle(base_idx - 2, base_idx - 1, base_idx + 1);
+                mesh.add_triangle(base_idx - 2, base_idx + 1, base_idx);
+            }
         }
-        painter.add(egui::Shape::line(pts, Stroke::new(1.15, col)));
+        painter.add(egui::Shape::mesh(mesh));
+        painter.add(egui::Shape::line(pts, Stroke::new(1.1, col)));
     }
-    painter.text(
-        pos2(rect.right() - 4.0, rect.bottom() + 10.0),
-        Align2::RIGHT_CENTER,
-        "full · sRGB",
-        theme::medium(9.5),
-        SpkColors::TEXT,
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1644,7 +2023,7 @@ fn draw_right_rail(ui: &mut Ui, f: &mut Map<String, Value>, stats: &ScopeStats) 
     let header_rect = Rect::from_min_size(rect.min, vec2(rect.width(), 34.0));
     {
         let mut h_ui = ui.new_child(egui::UiBuilder::new().max_rect(header_rect.shrink2(vec2(12.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        h_ui.label(RichText::new("显影与暗房参数 · Parameters").font(theme::semibold(12.5)).color(SpkColors::TEXT));
+        h_ui.label(RichText::new("暗房参数").font(theme::semibold(12.5)).color(SpkColors::TEXT));
         h_ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if chip_button(ui, "重置参数 ↺", false).on_hover_text("将曝光、成色剂与放大机滤色头全部恢复为默认值").clicked() {
                 f.insert("ev".into(), json!(0.0));
@@ -1660,14 +2039,31 @@ fn draw_right_rail(ui: &mut Ui, f: &mut Map<String, Value>, stats: &ScopeStats) 
         });
     }
 
-    // Pre-Dev / Post-Dev / All Segmented Switch
-    let seg_rect = Rect::from_min_size(pos2(rect.left(), header_rect.bottom()), vec2(rect.width(), 28.0));
+    // Equal-width recessed 3-segment tab bar (zero overflow at MIN_SIZE).
+    let seg_rect = Rect::from_min_size(pos2(rect.left(), header_rect.bottom()), vec2(rect.width(), 30.0));
     let tab = f.get(PARAM_TAB_FIELD).and_then(Value::as_str).unwrap_or("all").to_string();
     {
-        let mut s_ui = ui.new_child(egui::UiBuilder::new().max_rect(seg_rect.shrink2(vec2(12.0, 2.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        s_ui.spacing_mut().item_spacing.x = 6.0;
-        for (id, label) in [("all", "全部展开 All"), ("preDev", "显影前 Pre-Dev"), ("postDev", "印相 Post-Dev")] {
-            if segmented_pill(&mut s_ui, label, tab == id).clicked() {
+        let bar_rect = seg_rect.shrink2(vec2(12.0, 3.0));
+        ui.painter().rect_filled(bar_rect, CornerRadius::same(6), SpkColors::WELL);
+        ui.painter().rect_stroke(bar_rect, CornerRadius::same(6), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
+        let tabs = [("all", "全部"), ("preDev", "曝光与显影"), ("postDev", "放大与输出")];
+        let seg_w = (bar_rect.width() - 4.0) / tabs.len() as f32;
+        for (i, (id, label)) in tabs.into_iter().enumerate() {
+            let r = Rect::from_min_size(pos2(bar_rect.left() + 2.0 + i as f32 * seg_w, bar_rect.top() + 2.0), vec2(seg_w, bar_rect.height() - 4.0));
+            let active = tab == id;
+            let resp = ui
+                .interact(r, ui.scope_id().with(("tab", id)), Sense::click())
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, active, label));
+            if active {
+                ui.painter().rect_filled(r, CornerRadius::same(4), SpkColors::ACCENT_SOFT);
+                ui.painter().rect_stroke(r, CornerRadius::same(4), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
+            } else if resp.hovered() {
+                ui.painter().rect_filled(r, CornerRadius::same(4), Color32::from_white_alpha(12));
+            }
+            let fg = if active { SpkColors::ACCENT } else if resp.hovered() { SpkColors::TEXT } else { SpkColors::SECONDARY };
+            ui.painter().text(r.center(), Align2::CENTER_CENTER, label, theme::semibold(10.5), fg);
+            if resp.clicked() {
                 f.insert(PARAM_TAB_FIELD.into(), json!(id));
             }
         }
@@ -1680,7 +2076,7 @@ fn draw_right_rail(ui: &mut Ui, f: &mut Map<String, Value>, stats: &ScopeStats) 
         .id_salt("spektra-right-rail-scroll")
         .auto_shrink([false, false])
         .show(&mut r_ui, |ui| {
-            ui.add_space(6.0);
+            ui.add_space(8.0);
             let show_pre = tab == "all" || tab == "preDev";
             let show_post = tab == "all" || tab == "postDev";
 
@@ -1692,8 +2088,8 @@ fn draw_right_rail(ui: &mut Ui, f: &mut Map<String, Value>, stats: &ScopeStats) 
             let is_positive = film_info.polarity == Polarity::Positive;
             let effective_print = print_chain && !is_positive;
 
-            // 1. Latitude Section
             if show_pre {
+                // Card 1: Latitude Scope
                 let trailing = if is_positive {
                     format!("{} · 正片直扫", film_info.short_name)
                 } else if effective_print {
@@ -1701,210 +2097,251 @@ fn draw_right_rail(ui: &mut Ui, f: &mut Map<String, Value>, stats: &ScopeStats) 
                 } else {
                     format!("{} · 负片直扫", film_info.short_name)
                 };
-                section_header(ui, "▾  宽容度 · Latitude", Some(&trailing));
-                draw_latitude_plot(ui, stats);
-                ui.add_space(8.0);
-                rail_hairline(ui);
-                ui.add_space(6.0);
+                group_card(ui, |ui| {
+                    card_header(ui, "胶片宽容度 · ±3.2 EV", Some(&trailing));
+                    ui.add_space(4.0);
+                    draw_latitude_plot(ui, stats);
+                });
 
-                // 2. Input / Camera Section
-                if section_header_with_reset(ui, "▾  输入 / 相机 · Input / Camera", "重置相机曝光与输入色域") {
-                    f.insert("ev".into(), json!(0.0));
-                    f.insert("inputGamut".into(), json!(false));
-                }
-                let mut ev = f.get("ev").and_then(Value::as_f64).unwrap_or(0.0) as f32;
-                if scrub_slider_row(ui, "胶片曝光 EV", &mut ev, -4.0..=4.0, 0.0, None, |v| format!("{v:+.2}")) {
-                    f.insert("ev".into(), json!((f64::from(ev) * 100.0).round() / 100.0));
-                }
-                // As Shot checkbox + 1/3 EV step buttons
-                ui.horizontal(|ui| {
-                    ui.add_space(12.0);
-                    let as_shot = ev.abs() < 0.005;
-                    if spk_checkbox(ui, as_shot, "拍摄时设置 (0 EV)") {
+                // Card 2: Input & Camera Exposure
+                group_card(ui, |ui| {
+                    if card_header_with_reset(ui, "输入与相机曝光", "重置相机曝光与输入色域") {
                         f.insert("ev".into(), json!(0.0));
+                        f.insert("inputGamut".into(), json!(false));
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.spacing_mut().item_spacing.x = 3.0;
-                        ui.add_space(10.0);
-                        for (label, delta) in [("+1", 1.0f32), ("+⅓", 0.3333), ("0", 0.0), ("-⅓", -0.3333), ("-1", -1.0)] {
-                            if small_pill_button(ui, label, false).clicked() {
-                                let next = if label == "0" { 0.0 } else { (ev + delta).clamp(-4.0, 4.0) };
+                    ui.add_space(2.0);
+                    let mut ev = f.get("ev").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+                    if scrub_slider_row(ui, "胶片曝光 EV", &mut ev, -4.0..=4.0, 0.0, None, |v| format!("{v:+.2}")) {
+                        f.insert("ev".into(), json!((f64::from(ev) * 100.0).round() / 100.0));
+                    }
+                    ui.add_space(3.0);
+                    // Clean 5-button equal-width EV stepper bar (0 overlap at any width).
+                    let step_w = ((ui.available_width() - 16.0) / 5.0).max(32.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        for (label, delta) in [("−1", -1.0f32), ("−⅓", -0.3333), ("0 EV", 0.0), ("+⅓", 0.3333), ("+1", 1.0)] {
+                            let is_zero = label == "0 EV";
+                            let active = is_zero && ev.abs() < 0.005;
+                            let tip = if is_zero { "拍摄时设置 (0 EV)：点击恢复胶片曝光补偿为 0" } else { "按档位微调胶片曝光" };
+                            if equal_pill_button(ui, step_w, 20.0, label, active).on_hover_text(tip).clicked() {
+                                let next = if is_zero { 0.0 } else { (ev + delta).clamp(-4.0, 4.0) };
                                 f.insert("ev".into(), json!((f64::from(next) * 100.0).round() / 100.0));
                             }
                         }
                     });
-                });
-                ui.add_space(4.0);
-                let mut in_gamut = f.get("inputGamut").and_then(Value::as_bool).unwrap_or(false);
-                if toggle_row(
-                    ui,
-                    "输入光谱色域压缩 (Input Gamut)",
-                    &mut in_gamut,
-                    true,
-                    "ACES RGC 光谱轨迹径向压缩，防止极端霓虹饱和色在光谱上采样时溢出",
-                ) {
-                    f.insert("inputGamut".into(), json!(in_gamut));
-                }
-
-                ui.add_space(8.0);
-                rail_hairline(ui);
-                ui.add_space(6.0);
-
-                // 3. Film Development & DIR Couplers Section
-                if section_header_with_reset(ui, "▾  显影与成色剂 · Film Chemistry", "重置 DIR 成色剂") {
-                    f.insert("couplers".into(), json!(false));
-                    f.insert("couplersAmount".into(), json!(1.0));
-                }
-                let mut couplers = f.get("couplers").and_then(Value::as_bool).unwrap_or(false) && !is_positive;
-                let couplers_tip = if is_positive {
-                    "正片反转胶片的 DIR 反射成色剂分支暂未开放，当前仅支持负片与电影胶片"
-                } else {
-                    "开启物理层间与同层显影抑制成色剂矩阵，增强胶片色彩分离度与特征曲线"
-                };
-                if toggle_row(ui, "DIR 显影抑制成色剂 (Couplers)", &mut couplers, !is_positive, couplers_tip) {
-                    f.insert("couplers".into(), json!(couplers));
-                }
-                let mut amount = f.get("couplersAmount").and_then(Value::as_f64).unwrap_or(1.0) as f32;
-                ui.add_enabled_ui(couplers && !is_positive, |ui| {
-                    if scrub_slider_row(ui, "成色剂强度", &mut amount, 0.0..=2.0, 1.0, None, |v| format!("{v:.2}")) {
-                        f.insert("couplersAmount".into(), json!((f64::from(amount) * 100.0).round() / 100.0));
+                    ui.add_space(4.0);
+                    let mut in_gamut = f.get("inputGamut").and_then(Value::as_bool).unwrap_or(false);
+                    if toggle_row(
+                        ui,
+                        "输入光谱色域压缩",
+                        &mut in_gamut,
+                        true,
+                        "ACES RGC 光谱轨迹径向压缩，防止极端霓虹饱和色在光谱上采样时溢出",
+                    ) {
+                        f.insert("inputGamut".into(), json!(in_gamut));
                     }
                 });
 
-                ui.add_space(8.0);
-                rail_hairline(ui);
-                ui.add_space(6.0);
+                // Card 3: Film Chemistry / DIR Couplers
+                group_card(ui, |ui| {
+                    if card_header_with_reset(ui, "显影化学 · DIR 成色剂", "重置 DIR 成色剂") {
+                        f.insert("couplers".into(), json!(false));
+                        f.insert("couplersAmount".into(), json!(1.0));
+                    }
+                    ui.add_space(2.0);
+                    let mut couplers = f.get("couplers").and_then(Value::as_bool).unwrap_or(false) && !is_positive;
+                    let couplers_tip = if is_positive {
+                        "正片反转胶片的 DIR 反射成色剂分支暂未开放，当前仅支持负片与电影胶片"
+                    } else {
+                        "开启物理层间与同层显影抑制成色剂矩阵，增强胶片色彩分离度与特征曲线"
+                    };
+                    if toggle_row(ui, "DIR 显影抑制成色剂", &mut couplers, !is_positive, couplers_tip) {
+                        f.insert("couplers".into(), json!(couplers));
+                    }
+                    let mut amount = f.get("couplersAmount").and_then(Value::as_f64).unwrap_or(1.0) as f32;
+                    ui.add_enabled_ui(couplers && !is_positive, |ui| {
+                        if scrub_slider_row(ui, "成色剂强度", &mut amount, 0.0..=2.0, 1.0, None, |v| format!("{v:.2}")) {
+                            f.insert("couplersAmount".into(), json!((f64::from(amount) * 100.0).round() / 100.0));
+                        }
+                    });
+                });
             }
 
             if show_post {
-                // 4. Enlarger & Dichroic Color Head (Print stage)
-                if section_header_with_reset(ui, "▾  放大机滤光头 · Enlarger (TH-KG3)", "将放大机恢复为数据库中性配光结果") {
-                    f.insert("printEv".into(), json!(0.0));
-                    f.insert("ccCyan".into(), json!(0.0));
-                    f.insert("ccMagenta".into(), json!(0.0));
-                    f.insert("ccYellow".into(), json!(0.0));
-                }
-
-                ui.horizontal(|ui| {
-                    ui.add_space(12.0);
+                // Card 4: Enlarger & Dichroic Color Head
+                group_card(ui, |ui| {
+                    if card_header_with_reset(ui, "放大机滤光灯头 · TH-KG3", "将放大机恢复为数据库中性配光结果") {
+                        f.insert("printEv".into(), json!(0.0));
+                        f.insert("ccCyan".into(), json!(0.0));
+                        f.insert("ccMagenta".into(), json!(0.0));
+                        f.insert("ccYellow".into(), json!(0.0));
+                    }
+                    ui.add_space(2.0);
                     let note = if is_positive {
-                        "当前为反转正片，已自动跳过放大机与相纸反相链".to_string()
+                        "反转正片模式：已自动跳过放大机与相纸反相链".to_string()
                     } else if effective_print {
                         let base_cc = photocraft_engine::spektra_cmds::neutral_cc_for(&cur_paper, &cur_film);
-                        format!("配光基准: C {:.1} · M {:.1} · Y {:.1}", base_cc[0], base_cc[1], base_cc[2])
+                        format!("配光基准  C {:.1} · M {:.1} · Y {:.1}", base_cc[0], base_cc[1], base_cc[2])
                     } else {
-                        "当前为胶片直扫模式，放大机与相纸未启用".to_string()
+                        "负片直扫模式：放大机与相纸未启用".to_string()
                     };
-                    ui.label(RichText::new(note).font(theme::mono(10.5)).color(SpkColors::DIM));
+                    let nw = ui.available_width();
+                    let (nr, _) = ui.allocate_exact_size(vec2(nw, 20.0), Sense::hover());
+                    ui.painter().rect_filled(nr, CornerRadius::same(4), SpkColors::WELL);
+                    ui.painter().with_clip_rect(nr.shrink2(vec2(6.0, 0.0))).text(
+                        pos2(nr.left() + 8.0, nr.center().y),
+                        Align2::LEFT_CENTER,
+                        note,
+                        theme::mono(9.5),
+                        SpkColors::DIM,
+                    );
+                    ui.add_space(4.0);
+
+                    ui.add_enabled_ui(effective_print, |ui| {
+                        let mut print_ev = f.get("printEv").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+                        if scrub_slider_row(ui, "印相曝光", &mut print_ev, -2.0..=2.0, 0.0, None, |v| format!("{v:+.2}")) {
+                            f.insert("printEv".into(), json!((f64::from(print_ev) * 100.0).round() / 100.0));
+                        }
+                        let mut cc_c = f.get("ccCyan").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+                        if scrub_slider_row(
+                            ui,
+                            "青色 C",
+                            &mut cc_c,
+                            -50.0..=50.0,
+                            0.0,
+                            Some((Color32::from_rgb(210, 68, 68), Color32::from_rgb(52, 188, 212))),
+                            |v| format!("{v:+.1}"),
+                        ) {
+                            f.insert("ccCyan".into(), json!((f64::from(cc_c) * 10.0).round() / 10.0));
+                        }
+                        let mut cc_m = f.get("ccMagenta").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+                        if scrub_slider_row(
+                            ui,
+                            "品红 M",
+                            &mut cc_m,
+                            -50.0..=50.0,
+                            0.0,
+                            Some((Color32::from_rgb(72, 188, 92), Color32::from_rgb(212, 68, 168))),
+                            |v| format!("{v:+.1}"),
+                        ) {
+                            f.insert("ccMagenta".into(), json!((f64::from(cc_m) * 10.0).round() / 10.0));
+                        }
+                        let mut cc_y = f.get("ccYellow").and_then(Value::as_f64).unwrap_or(0.0) as f32;
+                        if scrub_slider_row(
+                            ui,
+                            "黄色 Y",
+                            &mut cc_y,
+                            -50.0..=50.0,
+                            0.0,
+                            Some((Color32::from_rgb(68, 108, 218), Color32::from_rgb(232, 198, 52))),
+                            |v| format!("{v:+.1}"),
+                        ) {
+                            f.insert("ccYellow".into(), json!((f64::from(cc_y) * 10.0).round() / 10.0));
+                        }
+                    });
                 });
-                ui.add_space(2.0);
 
-                ui.add_enabled_ui(effective_print, |ui| {
-                    let mut print_ev = f.get("printEv").and_then(Value::as_f64).unwrap_or(0.0) as f32;
-                    if scrub_slider_row(ui, "印相曝光补偿", &mut print_ev, -2.0..=2.0, 0.0, None, |v| format!("{v:+.2}")) {
-                        f.insert("printEv".into(), json!((f64::from(print_ev) * 100.0).round() / 100.0));
-                    }
-                    let mut cc_c = f.get("ccCyan").and_then(Value::as_f64).unwrap_or(0.0) as f32;
-                    if scrub_slider_row(
+                // Card 5: Scanner & Output
+                group_card(ui, |ui| {
+                    card_header(ui, "扫描与输出", None);
+                    ui.add_space(2.0);
+                    let mut out_gamut = f.get("outputGamut").and_then(Value::as_bool).unwrap_or(false);
+                    if toggle_row(
                         ui,
-                        "青色滤片 Cyan",
-                        &mut cc_c,
-                        -50.0..=50.0,
-                        0.0,
-                        Some((Color32::from_rgb(210, 68, 68), Color32::from_rgb(52, 188, 212))),
-                        |v| format!("{v:+.1}"),
+                        "CAM16-UCS 输出色域压缩",
+                        &mut out_gamut,
+                        true,
+                        "在 CIECAM16-UCS 均匀色彩空间对高饱和色彩做平滑色度 roll-off 至 sRGB 色域内",
                     ) {
-                        f.insert("ccCyan".into(), json!((f64::from(cc_c) * 10.0).round() / 10.0));
+                        f.insert("outputGamut".into(), json!(out_gamut));
                     }
-                    let mut cc_m = f.get("ccMagenta").and_then(Value::as_f64).unwrap_or(0.0) as f32;
-                    if scrub_slider_row(
-                        ui,
-                        "品红滤片 Magenta",
-                        &mut cc_m,
-                        -50.0..=50.0,
-                        0.0,
-                        Some((Color32::from_rgb(72, 188, 92), Color32::from_rgb(212, 68, 168))),
-                        |v| format!("{v:+.1}"),
-                    ) {
-                        f.insert("ccMagenta".into(), json!((f64::from(cc_m) * 10.0).round() / 10.0));
-                    }
-                    let mut cc_y = f.get("ccYellow").and_then(Value::as_f64).unwrap_or(0.0) as f32;
-                    if scrub_slider_row(
-                        ui,
-                        "黄色滤片 Yellow",
-                        &mut cc_y,
-                        -50.0..=50.0,
-                        0.0,
-                        Some((Color32::from_rgb(68, 108, 218), Color32::from_rgb(232, 198, 52))),
-                        |v| format!("{v:+.1}"),
-                    ) {
-                        f.insert("ccYellow".into(), json!((f64::from(cc_y) * 10.0).round() / 10.0));
+                    let mut preview = f.get("__preview").and_then(Value::as_bool).unwrap_or(true);
+                    if toggle_row(ui, "同步主画布实时预览 (Preview)", &mut preview, true, "开启后主窗口画布同步显示冲印效果") {
+                        f.insert("__preview".into(), json!(preview));
                     }
                 });
-
-                ui.add_space(8.0);
-                rail_hairline(ui);
-                ui.add_space(6.0);
-
-                // 5. Scanner & Output Gamut Section
-                section_header(ui, "▾  扫描与输出 · Scanner & Output", None);
-                let mut out_gamut = f.get("outputGamut").and_then(Value::as_bool).unwrap_or(false);
-                if toggle_row(
-                    ui,
-                    "CAM16-UCS 输出色域压缩",
-                    &mut out_gamut,
-                    true,
-                    "在 CIECAM16-UCS 均匀色彩空间对高饱和色彩做平滑色度 roll-off 至 sRGB 色域内",
-                ) {
-                    f.insert("outputGamut".into(), json!(out_gamut));
-                }
-                let mut preview = f.get("__preview").and_then(Value::as_bool).unwrap_or(true);
-                if toggle_row(ui, "同步主画布实时预览 (Preview)", &mut preview, true, "开启后主窗口画布同步显示冲印效果") {
-                    f.insert("__preview".into(), json!(preview));
-                }
-                ui.add_space(12.0);
             }
+            ui.add_space(6.0);
         });
 }
 
 fn draw_latitude_plot(ui: &mut Ui, stats: &ScopeStats) {
-    let avail_w = (ui.available_width() - 24.0).max(160.0);
-    ui.horizontal(|ui| {
-        ui.add_space(12.0);
-        let (rect, _) = ui.allocate_exact_size(vec2(avail_w, 54.0), Sense::hover());
-        let p = ui.painter_at(rect);
-        p.rect_filled(rect, CornerRadius::same(3), SpkColors::PLOT);
-        // Latitude sweet-spot window (-3.2 EV .. +3.2 EV -> middle 64% of width)
-        let win_l = rect.left() + rect.width() * 0.18;
-        let win_r = rect.left() + rect.width() * 0.82;
-        p.rect_filled(Rect::from_min_max(pos2(win_l, rect.top()), pos2(win_r, rect.bottom())), CornerRadius::ZERO, SpkColors::LAT_BEYOND);
+    let avail_w = ui.available_width().max(150.0);
+    let (rect, _) = ui.allocate_exact_size(vec2(avail_w, 52.0), Sense::hover());
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, CornerRadius::same(4), SpkColors::PLOT);
 
-        let n = stats.lat_bins.len();
-        let bar_w = (rect.width() / n as f32).max(1.0);
-        for (i, &v) in stats.lat_bins.iter().enumerate() {
-            let h = v.clamp(0.0, 1.0) * (rect.height() - 6.0);
-            let x = rect.left() + i as f32 * bar_w;
-            let bar = Rect::from_min_max(pos2(x, rect.bottom() - h), pos2(x + bar_w - 0.5, rect.bottom()));
-            p.rect_filled(bar, CornerRadius::ZERO, SpkColors::LAT_INSIDE);
+    // Sweet-spot latitude window (-3.2 EV .. +3.2 EV -> middle 64% of width)
+    let win_l = rect.left() + rect.width() * 0.18;
+    let win_r = rect.left() + rect.width() * 0.82;
+    p.rect_filled(Rect::from_min_max(pos2(win_l, rect.top()), pos2(win_r, rect.bottom())), CornerRadius::ZERO, SpkColors::LAT_WINDOW);
+    // Subtle middle gray (0 EV) center guide
+    p.line_segment([pos2(rect.center().x, rect.top()), pos2(rect.center().x, rect.bottom())], Stroke::new(0.8, Color32::from_white_alpha(20)));
+
+    let n = stats.lat_bins.len();
+    let bar_w = (rect.width() / n as f32).max(1.0);
+    for (i, &v) in stats.lat_bins.iter().enumerate() {
+        let h = v.clamp(0.0, 1.0) * (rect.height() - 6.0);
+        if h <= 0.2 {
+            continue;
         }
-        p.rect_stroke(rect, CornerRadius::same(3), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
-    });
-    ui.horizontal(|ui| {
-        ui.add_space(12.0);
-        ui.label(
-            RichText::new(format!(
-                "低于 {:.1}% · 范围内 {:.1}% · 高于 {:.1}% · 6.4 档保留",
-                stats.below_pct, stats.within_pct, stats.above_pct
-            ))
-            .font(theme::mono(9.5))
-            .color(SpkColors::DIM),
-        );
-    });
+        let x = rect.left() + i as f32 * bar_w;
+        let in_sweet = (7..=32).contains(&i);
+        let col = if in_sweet { SpkColors::LAT_INSIDE } else { SpkColors::LAT_BEYOND };
+        let bar = Rect::from_min_max(pos2(x, rect.bottom() - h), pos2(x + bar_w - 0.5, rect.bottom()));
+        p.rect_filled(bar, CornerRadius::ZERO, col);
+    }
+    p.rect_stroke(rect, CornerRadius::same(4), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
+
+    ui.add_space(4.0);
+    let (row_r, _) = ui.allocate_exact_size(vec2(avail_w, 14.0), Sense::hover());
+    ui.painter().text(pos2(row_r.left(), row_r.center().y), Align2::LEFT_CENTER, format!("暗部 {:.1}%", stats.below_pct), theme::mono(9.5), SpkColors::DIM);
+    ui.painter().text(row_r.center(), Align2::CENTER_CENTER, format!("宽容区 {:.1}%", stats.within_pct), theme::mono(9.5), SpkColors::ACCENT);
+    ui.painter().text(pos2(row_r.right(), row_r.center().y), Align2::RIGHT_CENTER, format!("高光 {:.1}%", stats.above_pct), theme::mono(9.5), SpkColors::DIM);
 }
 
 // ---------------------------------------------------------------------------
-// SpektraLab Custom Micro-Widgets (ScrubSlider, Pills, Checkboxes, Headers)
+// SpektraLab Custom Micro-Widgets (Cards, ScrubSlider, Pills, Checkboxes, Headers)
 // ---------------------------------------------------------------------------
+
+fn group_card(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
+    let inner_w = (ui.available_width() - 42.0).max(160.0);
+    egui::Frame::NONE
+        .fill(SpkColors::GROUP)
+        .stroke(Stroke::new(1.0, SpkColors::RULE))
+        .corner_radius(CornerRadius::same(6))
+        .outer_margin(Margin::symmetric(10, 0))
+        .inner_margin(Margin::symmetric(10, 8))
+        .show(ui, |ui| {
+            ui.set_width(inner_w);
+            add(ui);
+        });
+    ui.add_space(7.0);
+}
+
+fn card_header(ui: &mut Ui, title: &str, trailing: Option<&str>) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(title).font(theme::semibold(11.0)).color(SpkColors::TEXT));
+        if let Some(tr) = trailing {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(RichText::new(tr).font(theme::medium(9.5)).color(SpkColors::DIM));
+            });
+        }
+    });
+}
+
+fn card_header_with_reset(ui: &mut Ui, title: &str, reset_tip: &str) -> bool {
+    let mut reset = false;
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(title).font(theme::semibold(11.0)).color(SpkColors::TEXT));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if small_pill_button(ui, "↺", false).on_hover_text(reset_tip).clicked() {
+                reset = true;
+            }
+        });
+    });
+    reset
+}
 
 fn section_header(ui: &mut Ui, title: &str, trailing: Option<&str>) {
     ui.horizontal(|ui| {
@@ -1920,29 +2357,13 @@ fn section_header(ui: &mut Ui, title: &str, trailing: Option<&str>) {
     ui.add_space(2.0);
 }
 
-fn section_header_with_reset(ui: &mut Ui, title: &str, reset_tip: &str) -> bool {
-    let mut reset = false;
-    ui.horizontal(|ui| {
-        ui.add_space(10.0);
-        ui.label(RichText::new(title).font(theme::semibold(11.5)).color(SpkColors::TEXT));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_space(10.0);
-            if small_pill_button(ui, "↺", false).on_hover_text(reset_tip).clicked() {
-                reset = true;
-            }
-        });
-    });
-    ui.add_space(2.0);
-    reset
-}
-
 fn stock_group_header(ui: &mut Ui, label: &str) {
     ui.add_space(3.0);
     ui.horizontal(|ui| {
         ui.add_space(12.0);
         ui.label(RichText::new(label).font(theme::medium(10.5)).color(SpkColors::DIM));
     });
-    ui.add_space(1.0);
+    ui.add_space(2.0);
 }
 
 fn rail_hairline(ui: &mut Ui) {
@@ -1950,57 +2371,37 @@ fn rail_hairline(ui: &mut Ui) {
     ui.painter().line_segment([r.left_center(), r.right_center()], Stroke::new(1.0, SpkColors::RULE));
 }
 
-fn action_pill(ui: &mut Ui, label: &str, active: bool) -> egui::Response {
-    let galley = ui.painter().layout_no_wrap(label.to_owned(), theme::semibold(11.5), Color32::WHITE);
-    let w = (galley.size().x + 20.0).max(88.0);
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, 23.0), Sense::click());
+fn equal_pill_button(ui: &mut Ui, w: f32, h: f32, label: &str, active: bool) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, h), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
     let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
-    let border_col = if active {
-        SpkColors::ACCENT
+    let bg = if active {
+        SpkColors::ACCENT_SOFT
     } else if resp.hovered() {
-        SpkColors::SECONDARY
+        SpkColors::PILL_HOVER
     } else {
-        SpkColors::DIM
+        SpkColors::PILL
     };
-    let text_col = if active {
-        SpkColors::ACCENT
-    } else if resp.hovered() {
-        SpkColors::TEXT
-    } else {
-        SpkColors::SECONDARY
-    };
+    let fg = if active { SpkColors::ACCENT } else { SpkColors::TEXT };
+    ui.painter().rect_filled(rect, CornerRadius::same(5), bg);
     if active {
-        ui.painter().rect_filled(rect, CornerRadius::same(99), Color32::from_rgba_unmultiplied(225, 169, 95, 28));
-    } else if resp.hovered() {
-        ui.painter().rect_filled(rect, CornerRadius::same(99), Color32::from_white_alpha(12));
+        ui.painter().rect_stroke(rect, CornerRadius::same(5), Stroke::new(1.0, SpkColors::ACCENT_BORDER), StrokeKind::Inside);
     }
-    ui.painter().rect_stroke(rect, CornerRadius::same(99), Stroke::new(1.0, border_col), StrokeKind::Inside);
-    ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, theme::semibold(11.5), text_col);
-    resp
-}
-
-fn segmented_pill(ui: &mut Ui, label: &str, active: bool) -> egui::Response {
-    let galley = ui.painter().layout_no_wrap(label.to_owned(), theme::semibold(10.5), Color32::WHITE);
-    let w = (galley.size().x + 14.0).max(74.0);
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::click());
-    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
-    let col = if active { SpkColors::ACCENT } else { SpkColors::DIM };
-    ui.painter().rect_stroke(rect, CornerRadius::same(99), Stroke::new(1.0, col), StrokeKind::Inside);
-    ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, theme::semibold(10.5), col);
+    ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, theme::semibold(10.0), fg);
     resp
 }
 
 fn chip_button(ui: &mut Ui, label: &str, active: bool) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(label.to_owned(), theme::medium(10.5), Color32::WHITE);
-    let w = galley.size().x + 12.0;
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, 19.0), Sense::click());
+    let w = galley.size().x + 14.0;
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, 21.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
     let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
     if active {
         ui.painter().rect_filled(rect, CornerRadius::same(99), SpkColors::ACCENT);
-        ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, theme::semibold(10.5), SpkColors::ON_SELECTION);
+        ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, theme::semibold(10.5), SpkColors::ON_ACCENT);
     } else {
-        let bg = if resp.hovered() { Color32::from_white_alpha(22) } else { SpkColors::PILL };
+        let bg = if resp.hovered() { SpkColors::PILL_HOVER } else { SpkColors::PILL };
         ui.painter().rect_filled(rect, CornerRadius::same(99), bg);
         ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, theme::medium(10.5), SpkColors::TEXT);
     }
@@ -2009,56 +2410,49 @@ fn chip_button(ui: &mut Ui, label: &str, active: bool) -> egui::Response {
 
 fn small_pill_button(ui: &mut Ui, label: &str, active: bool) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(label.to_owned(), theme::semibold(10.5), Color32::WHITE);
-    let w = (galley.size().x + 12.0).max(24.0);
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, 19.0), Sense::click());
+    let w = (galley.size().x + 13.0).max(24.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
     let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
     let bg = if active {
         SpkColors::ACCENT
     } else if resp.hovered() {
-        Color32::from_white_alpha(28)
+        SpkColors::PILL_HOVER
     } else {
         SpkColors::PILL
     };
-    let fg = if active { SpkColors::ON_SELECTION } else { SpkColors::TEXT };
+    let fg = if active { SpkColors::ON_ACCENT } else { SpkColors::TEXT };
     ui.painter().rect_filled(rect, CornerRadius::same(99), bg);
     ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, theme::semibold(10.5), fg);
     resp
 }
 
-fn spk_checkbox(ui: &mut Ui, on: bool, label: &str) -> bool {
-    let galley = ui.painter().layout_no_wrap(label.to_owned(), theme::medium(10.0), SpkColors::DIM);
-    let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 16.0, 16.0), Sense::click());
-    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
-    ui.painter().text(pos2(rect.left(), rect.center().y), Align2::LEFT_CENTER, label, theme::medium(10.0), SpkColors::DIM);
-    let box_r = Rect::from_min_size(pos2(rect.right() - 11.0, rect.center().y - 5.5), vec2(11.0, 11.0));
-    if on {
-        ui.painter().rect_filled(box_r, CornerRadius::same(2), SpkColors::ACCENT);
-    } else {
-        ui.painter().rect_stroke(box_r, CornerRadius::same(2), Stroke::new(1.0, SpkColors::DIM), StrokeKind::Inside);
-    }
-    resp.clicked()
-}
-
 fn toggle_row(ui: &mut Ui, label: &str, on: &mut bool, enabled: bool, tip: &str) -> bool {
     let mut changed = false;
     ui.add_enabled_ui(enabled, |ui| {
-        ui.horizontal(|ui| {
-            ui.add_space(12.0);
-            let avail = (ui.available_width() - 12.0).max(120.0);
-            let (rect, resp) = ui.allocate_exact_size(vec2(avail, 22.0), Sense::click());
-            let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip);
-            ui.painter().text(pos2(rect.left(), rect.center().y), Align2::LEFT_CENTER, label, theme::semibold(11.0), SpkColors::TEXT);
-            let box_r = Rect::from_min_size(pos2(rect.right() - 12.0, rect.center().y - 6.0), vec2(12.0, 12.0));
-            if *on {
-                ui.painter().rect_filled(box_r, CornerRadius::same(3), SpkColors::ACCENT);
-            } else {
-                ui.painter().rect_stroke(box_r, CornerRadius::same(3), Stroke::new(1.0, SpkColors::DIM), StrokeKind::Inside);
-            }
-            if resp.clicked() {
-                *on = !*on;
-                changed = true;
-            }
-        });
+        let avail = ui.available_width().max(140.0);
+        let (rect, resp) = ui.allocate_exact_size(vec2(avail, 25.0), Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, enabled, *on, label));
+        let resp = if enabled { resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { resp }.on_hover_text(tip);
+        let text_color = if enabled { SpkColors::TEXT } else { SpkColors::DIM };
+        let label_rect = Rect::from_min_max(rect.min, pos2((rect.right() - 36.0).max(rect.left()), rect.bottom()));
+        ui.painter().with_clip_rect(label_rect).text(pos2(label_rect.left(), label_rect.center().y), Align2::LEFT_CENTER, label, theme::semibold(10.5), text_color);
+
+        let track = Rect::from_center_size(pos2(rect.right() - 15.0, rect.center().y), vec2(30.0, 16.0));
+        let track_color = if *on {
+            SpkColors::ACCENT
+        } else if enabled && resp.hovered() {
+            SpkColors::PILL_HOVER
+        } else {
+            SpkColors::PILL
+        };
+        ui.painter().rect_filled(track, CornerRadius::same(8), track_color);
+        let knob_x = if *on { track.right() - 7.5 } else { track.left() + 7.5 };
+        ui.painter().circle_filled(pos2(knob_x, track.center().y), 5.5, if *on { SpkColors::ON_ACCENT } else { SpkColors::KNOB });
+        if resp.clicked() {
+            *on = !*on;
+            changed = true;
+        }
     });
     changed
 }
@@ -2074,23 +2468,28 @@ fn scrub_slider_row(
 ) -> bool {
     let (min, max) = (*range.start(), *range.end());
     let mut changed = false;
+    let avail = ui.available_width().max(150.0);
+    let label_w = 68.0;
+    let pill_w = 44.0;
+    let track_w = (avail - label_w - pill_w - 10.0).max(40.0);
+
     ui.horizontal(|ui| {
-        ui.add_space(12.0);
-        let label_r = ui.allocate_exact_size(vec2(88.0, 22.0), Sense::click());
+        ui.spacing_mut().item_spacing.x = 5.0;
+        let label_r = ui.allocate_exact_size(vec2(label_w, 24.0), Sense::click());
         if label_r.1.double_clicked() {
             *value = zero;
             changed = true;
         }
-        ui.painter().text(
+        ui.painter().with_clip_rect(label_r.0).text(
             pos2(label_r.0.left(), label_r.0.center().y),
             Align2::LEFT_CENTER,
             label,
-            theme::semibold(11.0),
+            theme::semibold(10.5),
             SpkColors::TEXT,
         );
 
-        let track_w = (ui.available_width() - 62.0).max(48.0);
-        let (s_rect, s_resp) = ui.allocate_exact_size(vec2(track_w, 20.0), Sense::click_and_drag());
+        let (s_rect, s_resp) = ui.allocate_exact_size(vec2(track_w, 24.0), Sense::click_and_drag());
+        s_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Slider, true, label));
         let s_resp = s_resp.on_hover_cursor(egui::CursorIcon::ResizeHorizontal).on_hover_text("拖动调节，双击恢复默认值");
         if s_resp.double_clicked() {
             *value = zero;
@@ -2104,8 +2503,12 @@ fn scrub_slider_row(
             changed = true;
         }
 
-        // Paint track (or colour gradient bar for Enlarger C/M/Y)
         let cy = s_rect.center().y;
+        let zt = ((zero - min) / (max - min)).clamp(0.0, 1.0);
+        let zx = s_rect.left() + zt * s_rect.width();
+        let vt = ((*value - min) / (max - min)).clamp(0.0, 1.0);
+        let kx = s_rect.left() + vt * s_rect.width();
+
         if let Some((c0, c1)) = gradient {
             let steps = 16;
             let seg_w = s_rect.width() / steps as f32;
@@ -2116,32 +2519,41 @@ fn scrub_slider_row(
                     (c0.g() as f32 * (1.0 - k) + c1.g() as f32 * k) as u8,
                     (c0.b() as f32 * (1.0 - k) + c1.b() as f32 * k) as u8,
                 );
-                let r = Rect::from_min_size(pos2(s_rect.left() + i as f32 * seg_w, cy - 1.5), vec2(seg_w + 0.5, 3.0));
-                ui.painter().rect_filled(r, CornerRadius::same(1), col);
+                let r = Rect::from_min_size(pos2(s_rect.left() + i as f32 * seg_w, cy - 2.0), vec2(seg_w + 0.5, 4.0));
+                ui.painter().rect_filled(r, CornerRadius::same(2), col);
             }
         } else {
-            ui.painter().line_segment([pos2(s_rect.left(), cy), pos2(s_rect.right(), cy)], Stroke::new(1.5, SpkColors::DIM));
+            let track = Rect::from_min_size(pos2(s_rect.left(), cy - 2.0), vec2(s_rect.width(), 4.0));
+            ui.painter().rect_filled(track, CornerRadius::same(2), SpkColors::PILL);
+            let (fill_l, fill_r) = if min < 0.0 && max > 0.0 {
+                (zx.min(kx), zx.max(kx))
+            } else {
+                (track.left(), kx)
+            };
+            if fill_r - fill_l > 0.5 {
+                let fill = Rect::from_min_max(pos2(fill_l, track.top()), pos2(fill_r, track.bottom()));
+                ui.painter().rect_filled(fill, CornerRadius::same(2), SpkColors::ACCENT);
+            }
         }
 
-        // Zero tick mark
-        let zt = ((zero - min) / (max - min)).clamp(0.0, 1.0);
-        let zx = s_rect.left() + zt * s_rect.width();
-        ui.painter().line_segment([pos2(zx, cy - 3.5), pos2(zx, cy + 3.5)], Stroke::new(1.0, SpkColors::SECONDARY));
+        // Zero reference tick mark
+        ui.painter().line_segment([pos2(zx, cy - 5.0), pos2(zx, cy + 5.0)], Stroke::new(1.0, SpkColors::SECONDARY));
 
         // Knob
-        let vt = ((*value - min) / (max - min)).clamp(0.0, 1.0);
-        let kx = s_rect.left() + vt * s_rect.width();
-        let knob_r = Rect::from_center_size(pos2(kx, cy), vec2(8.0, 8.0));
-        ui.painter().rect_filled(knob_r, CornerRadius::same(4), SpkColors::KNOB);
+        ui.painter().circle_filled(pos2(kx, cy), 5.5, SpkColors::KNOB);
+        ui.painter().circle_stroke(pos2(kx, cy), 5.5, Stroke::new(1.0, SpkColors::ACCENT));
 
         // Value pill readout
-        let (pill_r, pill_resp) = ui.allocate_exact_size(vec2(46.0, 17.0), Sense::click());
+        let (pill_r, pill_resp) = ui.allocate_exact_size(vec2(pill_w, 19.0), Sense::click());
+        let pill_hovered = pill_resp.hovered();
         if pill_resp.on_hover_text("点击重置为默认值").clicked() {
             *value = zero;
             changed = true;
         }
-        ui.painter().rect_filled(pill_r, CornerRadius::same(8), SpkColors::PILL);
-        ui.painter().text(pill_r.center(), Align2::CENTER_CENTER, fmt(*value), theme::mono(10.0), SpkColors::TEXT);
+        let pill_color = if pill_hovered { SpkColors::PILL_HOVER } else { SpkColors::WELL };
+        ui.painter().rect_filled(pill_r, CornerRadius::same(5), pill_color);
+        ui.painter().rect_stroke(pill_r, CornerRadius::same(5), Stroke::new(1.0, SpkColors::RULE), StrokeKind::Inside);
+        ui.painter().text(pill_r.center(), Align2::CENTER_CENTER, fmt(*value), theme::mono(9.5), SpkColors::TEXT);
     });
     changed
 }
@@ -2220,5 +2632,139 @@ mod tests {
         assert_eq!(d.fields().get("ev").and_then(Value::as_f64), Some(0.0));
         assert_eq!(d.fields().get("couplers").and_then(Value::as_bool), Some(false));
         assert_eq!(d.fields().get("ccYellow").and_then(Value::as_f64), Some(0.0));
+    }
+
+    #[test]
+    fn preview_controls_share_one_state() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({"width": 32, "height": 24})).unwrap();
+        let id = crate::dialogs::open_command_dialog(&mut app, COMMAND, "Film Simulation…").unwrap();
+
+        let mut h = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(vec2(1280.0, 820.0)).build_app(
+            |ui, app| {
+                crate::dialogs::run(app, ui);
+            },
+            app,
+        );
+        h.run_steps(5);
+
+        // The right-rail switch used to be overwritten by the footer's local copy.
+        // The output section is inside a scroll area, so drive it through accesskit.
+        h.get_by_label("同步主画布实时预览 (Preview)").click_accesskit();
+        h.run_steps(3);
+        {
+            let d = h.state().framework.dialogs.get_by_id::<SpektraDialog>(id).unwrap();
+            assert_eq!(d.fields().get("__preview").and_then(Value::as_bool), Some(false));
+        }
+
+        // The footer must be able to turn the same shared state back on.
+        h.get_by_label("Preview").click();
+        h.run_steps(3);
+        let d = h.state().framework.dialogs.get_by_id::<SpektraDialog>(id).unwrap();
+        assert_eq!(d.fields().get("__preview").and_then(Value::as_bool), Some(true));
+    }
+
+    #[test]
+    fn search_enter_does_not_confirm_dialog() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({"width": 32, "height": 24})).unwrap();
+        let id = crate::dialogs::open_command_dialog(&mut app, COMMAND, "Film Simulation…").unwrap();
+
+        let mut h = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(vec2(1280.0, 820.0)).build_app(
+            |ui, app| {
+                crate::dialogs::run(app, ui);
+            },
+            app,
+        );
+        h.run_steps(5);
+
+        h.get_by_role(egui::accesskit::Role::TextInput).click();
+        h.run_steps(2);
+        h.get_by_role(egui::accesskit::Role::TextInput).type_text("Velvia");
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+
+        let d = h.state().framework.dialogs.get_by_id::<SpektraDialog>(id).expect("dialog must stay open on Enter inside search");
+        assert_eq!(d.fields().get(SEARCH_FIELD).and_then(Value::as_str), Some("Velvia"));
+    }
+
+    #[test]
+    fn preset_recipe_applies_and_resets_all_physics_fields() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({"width": 32, "height": 24})).unwrap();
+        let id = crate::dialogs::open_command_dialog(&mut app, COMMAND, "Film Simulation…").unwrap();
+
+        let mut h = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(vec2(1280.0, 820.0)).build_app(
+            |ui, app| {
+                crate::dialogs::run(app, ui);
+            },
+            app,
+        );
+        h.run_steps(4);
+
+        {
+            let d = h.state_mut().framework.dialogs.get_mut_by_id::<SpektraDialog>(id).unwrap();
+            d.fields_mut().insert("film".into(), json!("kodak_vision3_500t"));
+            d.fields_mut().insert("ev".into(), json!(1.25));
+            d.fields_mut().insert("printEv".into(), json!(-0.75));
+            d.fields_mut().insert("couplers".into(), json!(true));
+            d.fields_mut().insert("ccCyan".into(), json!(8.0));
+            d.fields_mut().insert("ccYellow".into(), json!(15.0));
+        }
+        h.run_steps(3);
+
+        h.get_by_label("Portra 人像").click();
+        h.run_steps(3);
+
+        let d = h.state().framework.dialogs.get_by_id::<SpektraDialog>(id).unwrap();
+        assert_eq!(d.fields().get("film").and_then(Value::as_str), Some("kodak_portra_400"));
+        assert_eq!(d.fields().get("paper").and_then(Value::as_str), Some("kodak_portra_endura"));
+        assert_eq!(d.fields().get("ev").and_then(Value::as_f64), Some(0.0));
+        assert_eq!(d.fields().get("printEv").and_then(Value::as_f64), Some(0.0));
+        assert_eq!(d.fields().get("couplers").and_then(Value::as_bool), Some(false));
+        assert_eq!(d.fields().get("ccCyan").and_then(Value::as_f64), Some(0.0));
+        assert_eq!(d.fields().get("ccYellow").and_then(Value::as_f64), Some(0.0));
+    }
+
+    #[test]
+    fn compact_min_size_renders_without_panic() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({"width": 32, "height": 24})).unwrap();
+        let id = crate::dialogs::open_command_dialog(&mut app, COMMAND, "Film Simulation…").unwrap();
+
+        let mut h = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(vec2(940.0, 620.0)).build_app(
+            |ui, app| {
+                crate::dialogs::run(app, ui);
+            },
+            app,
+        );
+        h.run_steps(5);
+
+        h.get_by_label("分屏对比").click();
+        h.run_steps(2);
+        h.get_by_label("原图").click();
+        h.run_steps(2);
+        h.get_by_label("显影效果").click();
+        h.run_steps(2);
+
+        h.get_by_label("曝光与显影").click();
+        h.run_steps(2);
+        h.get_by_label("+1").click();
+        h.run_steps(2);
+        {
+            let d = h.state().framework.dialogs.get_by_id::<SpektraDialog>(id).unwrap();
+            assert_eq!(d.fields().get("ev").and_then(Value::as_f64), Some(1.0));
+        }
+
+        h.get_by_label("放大与输出").click();
+        h.run_steps(2);
+        h.get_by_label("全部").click();
+        h.run_steps(2);
+
+        h.get_by_label("Fujifilm Velvia 100").click();
+        h.run_steps(3);
+        let d = h.state().framework.dialogs.get_by_id::<SpektraDialog>(id).unwrap();
+        assert_eq!(d.fields().get("film").and_then(Value::as_str), Some("fujifilm_velvia_100"));
     }
 }

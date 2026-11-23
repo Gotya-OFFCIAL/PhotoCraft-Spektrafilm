@@ -3,15 +3,19 @@
 //! PhotoCraft deploys the assets as `<exe dir>/spektra/` (repo: `assets/spektra/`):
 //! `oracle/` holds the oracle static tables (cmfs/illuminants/spectra LUT/matrices),
 //! `profiles/` the 28 upstream film/paper profiles. The environment variable
-//! `PHOTOCRAFT_SPEKTTRA_ASSETS` overrides the root that contains both subdirectories.
+//! `PHOTOCRAFT_SPEKTTRA_ASSETS` (or `PHOTOCRAFT_SPEKTRA_ASSETS`) overrides the root
+//! that contains both subdirectories.
 
 use std::path::PathBuf;
 
 /// The asset root: env override, else `<exe dir>/spektra`, else `./spektra`.
 pub fn assets_root() -> PathBuf {
-    if let Ok(dir) = std::env::var("PHOTOCRAFT_SPEKTTRA_ASSETS") {
-        if !dir.is_empty() {
-            return PathBuf::from(dir);
+    for var in ["PHOTOCRAFT_SPEKTTRA_ASSETS", "PHOTOCRAFT_SPEKTRA_ASSETS"] {
+        if let Ok(dir) = std::env::var(var) {
+            let trimmed = dir.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed);
+            }
         }
     }
     if let Ok(exe) = std::env::current_exe() {

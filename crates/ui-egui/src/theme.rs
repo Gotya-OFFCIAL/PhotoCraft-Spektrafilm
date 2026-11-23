@@ -1144,34 +1144,94 @@ pub fn mono(size: f32) -> FontId {
     FontId::monospace(size)
 }
 
+const SPEKTRA_THEME_JSON: &str = r##"{
+  "schema": "craft-design-theme",
+  "schema_version": 1,
+  "id": "spektra.darkroom",
+  "name": "Spektra Darkroom",
+  "version": 1,
+  "variants": "dark",
+  "contrast_intent": "standard",
+  "seeds": {
+    "accent": "#e1a95f",
+    "neutral": "#262625",
+    "status": {
+      "bad": "#e85a56",
+      "good": "#72c472",
+      "info": "#6aa0e8",
+      "warn": "#e8b454"
+    }
+  },
+  "shape": {
+    "button_radius": 6.0
+  },
+  "dark": {
+    "accent.border": "#e1a95f8c",
+    "accent.soft": "#e1a95f2e",
+    "accent.solid": "#e1a95f",
+    "accent.strong": "#f6f4ef",
+    "accent.text": "#ebb975",
+    "caption.close_hover": "#c42b1c",
+    "caption.close_text": "#ffffff",
+    "data.scope": "#191a19",
+    "line.border": "#383937",
+    "line.control_edge": "#474845",
+    "line.divider": "#323331",
+    "state.hover": "#383836",
+    "state.pressed": "#464643",
+    "state.selected": "{accent.soft}",
+    "state.selected_hover": "{accent.soft}",
+    "status.bad.fg": "#ee6b66",
+    "status.warn.fg": "#f0be5a",
+    "surface.background": "#181817",
+    "surface.canvas": "#161615",
+    "surface.canvas_pattern": "#2c2c2a",
+    "surface.chrome": "#212120",
+    "surface.panel": "#2a2a29",
+    "surface.shadow": "#00000099",
+    "surface.sunken": "#1d1e1d",
+    "text.muted": "#bab7b0",
+    "text.normal": "#f6f4ef",
+    "text.on_accent": "#141210",
+    "text.on_strong": "#141210"
+  }
+}"##;
+
+/// Framework design-theme definition for PhotoCraft-Spektrafilm's warm charcoal & amber darkroom palette.
+pub(crate) fn spektra_theme_def() -> Option<Arc<ThemeDef>> {
+    static DEF: std::sync::LazyLock<Option<Arc<ThemeDef>>> = std::sync::LazyLock::new(|| {
+        craft::theme::format::parse(SPEKTRA_THEME_JSON.as_bytes()).ok().map(|f| Arc::new(f.theme))
+    });
+    DEF.clone()
+}
+
 /// Override dark-mode theme tokens with SpektraLab's warm darkroom palette when running under the Spektra brand.
 fn apply_spektra_override(mut t: Tokens) -> Tokens {
     if crate::panels::brand::is_spektra() && t.dark() {
-        // SpektraLab warm darkroom palette (`theme.css`): warm charcoal #2d2d2c cards,
-        // #1e1f1e fields, #f9f7f3 warm ivory text, and #e1a95f amber-gold accent.
-        t.chrome = Color32::from_rgb(38, 38, 37);
-        t.dock = Color32::from_rgb(32, 32, 31);
-        t.card = Color32::from_rgb(45, 45, 44);
-        t.card_border = Color32::from_rgb(58, 59, 57);
-        t.canvas = Color32::from_rgb(26, 26, 25);
-        t.field = Color32::from_rgb(30, 31, 30);
-        t.field_border = Color32::from_rgb(74, 75, 73);
-        t.hover = Color32::from_rgb(59, 59, 58);
-        t.pressed = Color32::from_rgb(74, 74, 73);
-        t.text = Color32::from_rgb(249, 247, 243);
-        t.text_dim = Color32::from_rgb(218, 216, 212);
-        t.text_faint = Color32::from_rgb(148, 146, 142);
+        // Aligned pixel-for-pixel with `SPEKTRA_THEME_JSON`.
+        t.chrome = Color32::from_rgb(33, 33, 32);
+        t.dock = Color32::from_rgb(29, 30, 29);
+        t.card = Color32::from_rgb(42, 42, 41);
+        t.card_border = Color32::from_rgb(56, 57, 55);
+        t.canvas = Color32::from_rgb(22, 22, 21);
+        t.field = Color32::from_rgb(29, 30, 29);
+        t.field_border = Color32::from_rgb(71, 72, 69);
+        t.hover = Color32::from_rgb(56, 56, 54);
+        t.pressed = Color32::from_rgb(70, 70, 67);
+        t.text = Color32::from_rgb(246, 244, 239);
+        t.text_dim = Color32::from_rgb(186, 183, 176);
+        t.text_faint = Color32::from_rgb(127, 125, 119);
         t.icon = Color32::from_rgb(232, 230, 225);
         t.accent = Color32::from_rgb(225, 169, 95);
-        t.accent_soft = Color32::from_rgba_unmultiplied(225, 169, 95, 48);
+        t.accent_soft = Color32::from_rgba_unmultiplied(225, 169, 95, 46);
         t.accent_border = Color32::from_rgb(225, 169, 95);
-        t.accent_text = Color32::from_rgb(235, 188, 120);
-        t.separator = Color32::from_rgb(58, 59, 57);
+        t.accent_text = Color32::from_rgb(235, 185, 117);
+        t.separator = Color32::from_rgb(50, 51, 49);
         t.primary_bg = Color32::from_rgb(225, 169, 95);
-        t.primary_text = Color32::from_rgb(15, 14, 14);
-        t.tab_strip = Color32::from_rgb(32, 32, 31);
-        t.row_selected = Color32::from_rgb(68, 67, 64);
-        t.histogram_bg = Color32::from_rgb(30, 31, 30);
+        t.primary_text = Color32::from_rgb(20, 18, 16);
+        t.tab_strip = Color32::from_rgb(29, 30, 29);
+        t.row_selected = Color32::from_rgb(66, 65, 61);
+        t.histogram_bg = Color32::from_rgb(25, 26, 25);
     }
     t
 }

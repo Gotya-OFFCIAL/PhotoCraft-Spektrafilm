@@ -32,11 +32,12 @@ pub fn expose(rgb: [f64; 3], raw_lut: &RawLut, tables: &Tables) -> [f64; 3] {
 }
 
 /// 负片直扫管线：持有合成好的 raw LUT。
+#[derive(Clone)]
 pub struct NegativeScanPipeline {
     pub profile: FilmProfile,
     /// 共享的 oracle 静态表（30MB 级）：多管线复用同一份 Arc，避免按 (film, paper) 组合重复加载。
     pub tables: std::sync::Arc<Tables>,
-    raw_lut: RawLut,
+    raw_lut: std::sync::Arc<RawLut>,
     /// DIR 成色剂（None = 关闭，M1 语义；Some = 开启，M2-C）
     pub couplers: Option<crate::couplers::DirCouplers>,
     /// 输出色域压缩（None = 关闭；Some = cam16ucs 默认，M2-D2）
@@ -69,7 +70,7 @@ impl NegativeScanPipeline {
             .illuminant(&profile.info.reference_illuminant)
             .cloned()
             .unwrap_or_else(|| tables.illuminant("D55").cloned().expect("D55 illuminant"));
-        let raw_lut = upsampling::compose_raw_lut(&tables.spectra_lut, &sensitivity, &window, &illu_d55);
+        let raw_lut = std::sync::Arc::new(upsampling::compose_raw_lut(&tables.spectra_lut, &sensitivity, &window, &illu_d55));
         let pre = std::sync::Arc::new(film::precompute(&profile, None, false));
         Self {
             profile,
@@ -91,7 +92,7 @@ impl NegativeScanPipeline {
         raw_lut: RawLut,
     ) -> Self {
         let mut s = Self::new(profile, tables);
-        s.raw_lut = raw_lut;
+        s.raw_lut = std::sync::Arc::new(raw_lut);
         s
     }
 
@@ -117,9 +118,9 @@ impl NegativeScanPipeline {
     pub fn with_input_gamut(mut self, knee: (f64, f64, f64)) -> Self {
         let locus = crate::gamut::spectral_locus_xy(&self.tables.cmfs);
         let ref_xy = self.tables.illu_xy_d55;
-        self.raw_lut = crate::gamut::remap_tc_lut_for_compression(
+        self.raw_lut = std::sync::Arc::new(crate::gamut::remap_tc_lut_for_compression(
             &self.raw_lut, ref_xy, knee.0, knee.1, knee.2, &locus,
-        );
+        ));
         self
     }
 
@@ -170,12 +171,13 @@ impl NegativeScanPipeline {
 }
 
 /// 完整暗房管线：负片 → 放大机 → 相纸 → 扫描（M2-B）。
+#[derive(Clone)]
 pub struct PrintPipeline {
     pub film: FilmProfile,
     pub paper: FilmProfile,
     /// 共享的 oracle 静态表（30MB 级）：与 NegativeScanPipeline 复用同一份 Arc。
     pub tables: std::sync::Arc<Tables>,
-    raw_lut: RawLut,
+    raw_lut: std::sync::Arc<RawLut>,
     factor_midgray: f64,
     /// 数据库解析出的放大机中性滤色（print_stock × illuminant × film_stock）
     pub cc: [f64; 3],
@@ -212,8 +214,9 @@ impl PrintPipeline {
             .illuminant(&film.info.reference_illuminant)
             .cloned()
             .unwrap_or_else(|| tables.illuminant("D55").cloned().expect("D55"));
-        let raw_lut =
-            crate::upsampling::compose_raw_lut(&tables.spectra_lut, &sensitivity, &window, &illu_d55);
+        let raw_lut = std::sync::Arc::new(
+            crate::upsampling::compose_raw_lut(&tables.spectra_lut, &sensitivity, &window, &illu_d55),
+        );
         let cc = crate::printing::resolve_print_filters(
             &paper.info.stock,
             "TH-KG3",
@@ -252,9 +255,9 @@ impl PrintPipeline {
     /// 开启输入侧色域压缩并重算 factor_midgray（中灰链走压缩后的 LUT，与上游一致）。
     pub fn with_input_gamut(mut self, knee: (f64, f64, f64)) -> Self {
         let locus = crate::gamut::spectral_locus_xy(&self.tables.cmfs);
-        self.raw_lut = crate::gamut::remap_tc_lut_for_compression(
+        self.raw_lut = std::sync::Arc::new(crate::gamut::remap_tc_lut_for_compression(
             &self.raw_lut, self.tables.illu_xy_d55, knee.0, knee.1, knee.2, &locus,
-        );
+        ));
         self.factor_midgray = crate::printing::compute_print_exposure_factor(
             &self.film, &self.paper, &self.tables, &self.raw_lut, self.cc,
         );

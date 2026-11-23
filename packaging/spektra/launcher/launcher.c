@@ -62,7 +62,36 @@ int main(void)
     PROCESS_INFORMATION pi;
     ZeroMemory(&pi, sizeof(pi));
 
-    if (!CreateProcessW(exe, NULL, NULL, NULL, FALSE, 0, NULL, workdir, &si, &pi)) {
+    const wchar_t *raw_cmd = GetCommandLineW();
+    const wchar_t *args = raw_cmd ? raw_cmd : L"";
+    while (*args == L' ' || *args == L'\t') {
+        ++args;
+    }
+    if (*args == L'"') {
+        ++args;
+        while (*args && *args != L'"') {
+            ++args;
+        }
+        if (*args == L'"') {
+            ++args;
+        }
+    } else {
+        while (*args && *args != L' ' && *args != L'\t') {
+            ++args;
+        }
+    }
+    while (*args == L' ' || *args == L'\t') {
+        ++args;
+    }
+
+    wchar_t cmd_line[4096];
+    wchar_t *cmd_ptr = NULL;
+    if (*args != L'\0') {
+        _snwprintf_s(cmd_line, 4096, _TRUNCATE, L"\"%s\" %s", exe, args);
+        cmd_ptr = cmd_line;
+    }
+
+    if (!CreateProcessW(exe, cmd_ptr, NULL, NULL, FALSE, 0, NULL, workdir, &si, &pi)) {
         wchar_t msg[560];
         _snwprintf_s(msg, 560, _TRUNCATE,
                      L"CreateProcessW(photocraft.exe) failed (win32 error %lu).",

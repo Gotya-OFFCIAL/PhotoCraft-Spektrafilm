@@ -2,7 +2,7 @@
 //! the options bar's button, the rail's Home link and `window.home` share.
 
 use craft::behavior::IconId;
-use craft::ui::contract::Bind;
+use craft::ui::contract::{Bind, Show as _};
 use craft::ui::runtime::env::Label;
 use craft::ui::shell::{StartAction, StartLink, StartScreen};
 
@@ -21,7 +21,21 @@ pub(super) fn start_screen(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     // The source reads the app, so the page binds copies of the view and the sort and they are written back after.
     let (mut view, mut sort) = (app.ui.chrome.home_recent_view, app.ui.chrome.home_recent_sort);
     let links = links();
-    let actions = {
+    let actions = if crate::panels::brand::is_spektra() {
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            render_spektra_banner(ui);
+            let source = crate::home_recent_ui::source(app, &ctx);
+            StartScreen::new(Bind::bound(&mut view), Bind::bound(&mut sort), &recent)
+                .thumbnails(&thumbs, &source)
+                .links(&links[..])
+                .max_recent(HOME_RECENT)
+                .drop_hint(Label::from(tl!("Drop an image or PSD anywhere to open it.")))
+                .show(ui)
+                .actions
+        })
+        .inner
+    } else {
         let source = crate::home_recent_ui::source(app, &ctx);
         StartScreen::new(Bind::bound(&mut view), Bind::bound(&mut sort), &recent)
             .thumbnails(&thumbs, &source)
@@ -46,6 +60,30 @@ pub(super) fn start_screen(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             crate::new_doc_ui::open(app);
         }
     }
+}
+
+/// Brand header strip shown at the top of the Home page under `PhotoCraft-Spektrafilm`.
+fn render_spektra_banner(ui: &mut egui::Ui) {
+    let t = crate::theme::Tokens::get(ui.ctx());
+    let avail_w = ui.available_width();
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(avail_w, 46.0), egui::Sense::hover());
+    ui.painter().rect_filled(rect, egui::CornerRadius::ZERO, t.chrome);
+    ui.painter().line_segment([egui::pos2(rect.left(), rect.bottom()), egui::pos2(rect.right(), rect.bottom())], egui::Stroke::new(1.0, t.separator));
+    let mut row = ui.new_child(egui::UiBuilder::new().max_rect(rect.shrink2(egui::vec2(20.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    row.spacing_mut().item_spacing.x = 10.0;
+    crate::panels::brand::mark().show(&mut row);
+    row.label(egui::RichText::new(crate::panels::app_name()).font(crate::theme::semibold(15.0)).color(t.text));
+    let badge_fg = if t.dark() { t.accent } else { t.accent_text };
+    let badge_bg = t.accent_soft;
+    let badge_text = "81 波长光谱暗房";
+    let galley = row.painter().layout_no_wrap(badge_text.into(), crate::theme::semibold(10.5), badge_fg);
+    let (b_rect, _) = row.allocate_exact_size(egui::vec2(galley.size().x + 14.0, 20.0), egui::Sense::hover());
+    row.painter().rect_filled(b_rect, egui::CornerRadius::same(99), badge_bg);
+    row.painter().rect_stroke(b_rect, egui::CornerRadius::same(99), egui::Stroke::new(1.0, t.accent_border), egui::StrokeKind::Inside);
+    row.painter().text(b_rect.center(), egui::Align2::CENTER_CENTER, badge_text, crate::theme::semibold(10.5), badge_fg);
+    row.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.label(egui::RichText::new("胶片物理显影 · 放大机印相 · 内容边缘吸附").font(crate::theme::medium(11.5)).color(t.text_dim));
+    });
 }
 
 /// Shows a recent file selected in the system file manager; a failure goes to the status line, as the other open

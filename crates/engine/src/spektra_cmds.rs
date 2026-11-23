@@ -119,6 +119,11 @@ impl Pipeline {
     }
 }
 
+fn base_cache() -> &'static Mutex<HashMap<String, Arc<Pipeline>>> {
+    static BASE_CACHE: OnceLock<Mutex<HashMap<String, Arc<Pipeline>>>> = OnceLock::new();
+    BASE_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 fn cache() -> &'static Mutex<HashMap<String, Arc<Pipeline>>> {
     static CACHE: OnceLock<Mutex<HashMap<String, Arc<Pipeline>>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -157,8 +162,49 @@ fn shared_output_gamut() -> Result<Arc<spektra_core::gamut::OutputGamutCompresso
     Ok(g)
 }
 
+fn base_pipeline_for(cfg: &FilmSim) -> Result<Arc<Pipeline>> {
+    let base_key = format!(
+        "{}\u{1}{}\u{1}{}\u{1}{}",
+        cfg.film, cfg.paper, cfg.print_chain, cfg.input_gamut
+    );
+    {
+        let guard = base_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(p) = guard.get(&base_key) {
+            return Ok(Arc::clone(p));
+        }
+    }
+    let tables = tables()?;
+    let film = load_profile(&cfg.film)
+        .map_err(|e| EngineError::Other(format!("SpektraFilm film `{}`: {e}", cfg.film)))?;
+    // 彩色反转正片（Velvia / Provia / Ektachrome / Kodachrome）显影后已是正像，
+    // 送入负片相纸 PrintPipeline 会被二次反相；按 SpektraLab 规则自动跳过相纸改走透射正片直扫。
+    let use_print = cfg.print_chain && film.info.film_type != "positive";
+    let built = if use_print {
+        let paper = load_profile(&cfg.paper)
+            .map_err(|e| EngineError::Other(format!("SpektraFilm paper `{}`: {e}", cfg.paper)))?;
+        let mut pipe = PrintPipeline::new(film, paper, tables);
+        if cfg.input_gamut {
+            pipe = pipe.with_input_gamut((0.0, 1.0, 6.0));
+        }
+        Arc::new(Pipeline::Print(Arc::new(pipe)))
+    } else {
+        let mut pipe = NegativeScanPipeline::new(film, tables);
+        if cfg.input_gamut {
+            pipe = pipe.with_input_gamut((0.0, 1.0, 6.0));
+        }
+        Arc::new(Pipeline::Scan(Arc::new(pipe)))
+    };
+    let mut guard = base_cache().lock().unwrap_or_else(|e| e.into_inner());
+    if guard.len() >= 16 {
+        guard.clear();
+    }
+    guard.insert(base_key, Arc::clone(&built));
+    Ok(built)
+}
+
 /// 加载（或从缓存取）配置对应的管线。
-/// 静态表全局共享后，每组合只构建管线自身（raw LUT 合成约百毫秒级），按参数指纹缓存。
+/// 二级缓存：先复用 (film, paper, print_chain, input_gamut) 基底管线（免重复读盘与合成 raw LUT），
+/// 再仅叠加上色剂 / 放大机 CC / 输出色域压缩，按参数指纹缓存。
 fn pipeline_for(cfg: &FilmSim) -> Result<Arc<Pipeline>> {
     let q = |v: f64| (v * 100.0).round() as i64;
     let key = format!(
@@ -175,18 +221,20 @@ fn pipeline_for(cfg: &FilmSim) -> Result<Arc<Pipeline>> {
         q(cfg.cc_magenta),
         q(cfg.cc_yellow)
     );
-    let mut guard = cache().lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(p) = guard.get(&key) {
-        return Ok(Arc::clone(p));
+    {
+        let guard = cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(p) = guard.get(&key) {
+            return Ok(Arc::clone(p));
+        }
     }
-    let tables = tables()?;
+    let base = base_pipeline_for(cfg)?;
     let out_gamut = if cfg.output_gamut {
         Some(shared_output_gamut()?)
     } else {
         None
     };
-    let make_couplers = |film: &spektra_core::FilmProfile| -> Option<spektra_core::couplers::DirCouplers> {
-        if !cfg.couplers || cfg.couplers_amount <= 0.0 || film.info.film_type == "positive" {
+    let make_couplers = |film_type: &str| -> Option<spektra_core::couplers::DirCouplers> {
+        if !cfg.couplers || cfg.couplers_amount <= 0.0 || film_type == "positive" {
             // spektra-core precompute() 当前仅实现负片方向（silver = 曲线本身），正片反射分支尚未移植。
             return None;
         }
@@ -194,38 +242,40 @@ fn pipeline_for(cfg: &FilmSim) -> Result<Arc<Pipeline>> {
         c.amount = cfg.couplers_amount;
         Some(c)
     };
-    let film = load_profile(&cfg.film)
-        .map_err(|e| EngineError::Other(format!("SpektraFilm film `{}`: {e}", cfg.film)))?;
-    let couplers = make_couplers(&film);
-    // 彩色反转正片（Velvia / Provia / Ektachrome / Kodachrome）显影后已是正像，
-    // 送入负片相纸 PrintPipeline 会被二次反相；按 SpektraLab 规则自动跳过相纸改走透射正片直扫。
-    let use_print = cfg.print_chain && film.info.film_type != "positive";
-    let p = if use_print {
-        let paper = load_profile(&cfg.paper)
-            .map_err(|e| EngineError::Other(format!("SpektraFilm paper `{}`: {e}", cfg.paper)))?;
-        let mut pipe = PrintPipeline::new(film, paper, tables);
-        if cfg.input_gamut {
-            pipe = pipe.with_input_gamut((0.0, 1.0, 6.0));
+    let p = match &*base {
+        Pipeline::Print(base_pipe) => {
+            let couplers = make_couplers(&base_pipe.film.info.film_type);
+            let need_enlarger =
+                cfg.cc_cyan != 0.0 || cfg.cc_magenta != 0.0 || cfg.cc_yellow != 0.0 || cfg.print_ev != 0.0;
+            if !need_enlarger && couplers.is_none() && out_gamut.is_none() {
+                Arc::clone(&base)
+            } else {
+                let mut pipe = (**base_pipe).clone();
+                if need_enlarger {
+                    pipe = pipe.with_enlarger([cfg.cc_cyan, cfg.cc_magenta, cfg.cc_yellow], cfg.print_ev);
+                }
+                if couplers.is_some() {
+                    pipe.set_couplers(couplers);
+                }
+                pipe.output_gamut = out_gamut;
+                Arc::new(Pipeline::Print(Arc::new(pipe)))
+            }
         }
-        if cfg.cc_cyan != 0.0 || cfg.cc_magenta != 0.0 || cfg.cc_yellow != 0.0 || cfg.print_ev != 0.0 {
-            pipe = pipe.with_enlarger([cfg.cc_cyan, cfg.cc_magenta, cfg.cc_yellow], cfg.print_ev);
+        Pipeline::Scan(base_pipe) => {
+            let couplers = make_couplers(&base_pipe.profile.info.film_type);
+            if couplers.is_none() && out_gamut.is_none() {
+                Arc::clone(&base)
+            } else {
+                let mut pipe = (**base_pipe).clone();
+                if couplers.is_some() {
+                    pipe.set_couplers(couplers);
+                }
+                pipe.output_gamut = out_gamut;
+                Arc::new(Pipeline::Scan(Arc::new(pipe)))
+            }
         }
-        if couplers.is_some() {
-            pipe.set_couplers(couplers);
-        }
-        pipe.output_gamut = out_gamut;
-        Arc::new(Pipeline::Print(Arc::new(pipe)))
-    } else {
-        let mut pipe = NegativeScanPipeline::new(film, tables);
-        if cfg.input_gamut {
-            pipe = pipe.with_input_gamut((0.0, 1.0, 6.0));
-        }
-        if couplers.is_some() {
-            pipe.set_couplers(couplers);
-        }
-        pipe.output_gamut = out_gamut;
-        Arc::new(Pipeline::Scan(Arc::new(pipe)))
     };
+    let mut guard = cache().lock().unwrap_or_else(|e| e.into_inner());
     if guard.len() >= 32 {
         guard.clear();
     }

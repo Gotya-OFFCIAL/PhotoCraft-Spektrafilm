@@ -238,7 +238,7 @@ impl Default for Framework {
 
 fn build_host(sections: &Arc<PrefSections>, lang: &str, files: Option<&Arc<dyn Files>>) -> Host {
     let i18n = i18n::framework_i18n();
-    let mut builder = Host::builder(AppInfo { id: "photocraft", name: "PhotoCraft", version: env!("CARGO_PKG_VERSION") })
+    let mut builder = Host::builder(AppInfo { id: "photocraft", name: crate::panels::app_name(), version: env!("CARGO_PKG_VERSION") })
         .i18n(Arc::clone(i18n))
         .settings(Arc::clone(sections) as Arc<dyn SectionStore>)
         .jobs(craft::host::default_jobs());
@@ -322,6 +322,10 @@ impl Framework {
         let rtl = i18n::framework_i18n().from_code(lang).is_some_and(|l| i18n::framework_i18n().rtl(l));
         let root = match theme.library() {
             Some(def) => base_root().library_theme(Arc::clone(def)),
+            None if crate::panels::brand::is_spektra() && theme.is_dark() => match crate::theme::spektra_theme_def() {
+                Some(def) => base_root().library_theme(def),
+                None => base_root().theme(theme.id().clone()),
+            },
             None => base_root().theme(theme.id().clone()),
         };
         let mut root = root

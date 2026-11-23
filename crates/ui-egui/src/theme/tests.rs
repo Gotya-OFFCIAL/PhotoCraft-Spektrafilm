@@ -190,3 +190,18 @@ fn every_palette_holds_text_contrast() {
         assert!(contrast(t.caption_close_text, t.caption_close) >= 4.0, "{kind:?}: close button glyph");
     }
 }
+
+#[test]
+fn spektra_darkroom_theme_parses_and_resolves_cleanly() {
+    let def = spektra_theme_def().expect("SPEKTRA_THEME_JSON parses cleanly");
+    assert_eq!(def.id.as_str(), "spektra.darkroom");
+    let appearance = craft::theme::Appearance {
+        mode: craft::theme::ramp::Mode::Dark,
+        contrast: craft::theme::Contrast::Standard,
+        size: craft::theme::Size::Compact,
+        text_size: craft::theme::TextSize::Small,
+        reduced_motion: false,
+    };
+    let resolved = craft::theme::resolve(&def, appearance, None);
+    assert!(resolved.warnings.is_empty(), "theme warnings: {:?}", resolved.warnings);
+}

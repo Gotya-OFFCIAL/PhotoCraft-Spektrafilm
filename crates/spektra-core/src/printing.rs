@@ -59,20 +59,32 @@ impl DichroicCustom {
 /// 放大机默认滤色（EnlargerParams 默认：c=0, m=65, y=55，无 shift）。
 pub const DEFAULT_CC: [f64; 3] = [0.0, 65.0, 55.0];
 
-pub const NEUTRAL_FILTERS_JSON: &str =
-    "G:/AI/移植工作/参考/spektrafilm-upstream/src/spektrafilm/data/filters/neutral_print_filters.json";
+fn cached_neutral_filters() -> Option<std::sync::Arc<serde_json::Value>> {
+    static TABLE: std::sync::Mutex<Option<(std::path::PathBuf, std::sync::Arc<serde_json::Value>)>> =
+        std::sync::Mutex::new(None);
+    let path = crate::assets::oracle_dir().join("filters").join("neutral_print_filters.json");
+    {
+        let guard = TABLE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((cached_path, val)) = guard.as_ref() {
+            if *cached_path == path {
+                return Some(std::sync::Arc::clone(val));
+            }
+        }
+    }
+    let text = std::fs::read_to_string(&path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let arc = std::sync::Arc::new(val);
+    let mut guard = TABLE.lock().unwrap_or_else(|e| e.into_inner());
+    *guard = Some((path, std::sync::Arc::clone(&arc)));
+    Some(arc)
+}
 
 /// 解析放大机中性滤色（digest_params → apply_database_neutral_print_filters 语义）：
 /// 按 (相纸, 光源, 胶片) 三元组查 neutral_print_filters.json，查到则替换默认值，否则用 DEFAULT_CC。
+/// 首次成功读取后缓存于内存，避免 UI 每帧查询引发磁盘 I/O。
 pub fn resolve_print_filters(paper_stock: &str, illuminant: &str, film_stock: &str) -> [f64; 3] {
-    let bundled = crate::assets::oracle_dir().join("filters").join("neutral_print_filters.json");
-    let text = match std::fs::read_to_string(&bundled).or_else(|_| std::fs::read_to_string(NEUTRAL_FILTERS_JSON)) {
-        Ok(t) => t,
-        Err(_) => return DEFAULT_CC,
-    };
-    let v: serde_json::Value = match serde_json::from_str(&text) {
-        Ok(v) => v,
-        Err(_) => return DEFAULT_CC,
+    let Some(v) = cached_neutral_filters() else {
+        return DEFAULT_CC;
     };
     let entry = &v[paper_stock][illuminant][film_stock];
     match entry.as_array() {
@@ -374,6 +386,16 @@ mod tests {
                 assert!(curves[i][c] >= curves[i - 1][c] - 1e-12, "c={c} i={i}");
             }
         }
+    }
+
+    #[test]
+    fn resolve_print_filters_uses_bundled_and_caches() {
+        let a = resolve_print_filters("kodak_portra_endura", "TH-KG3", "kodak_portra_400");
+        let b = resolve_print_filters("kodak_portra_endura", "TH-KG3", "kodak_portra_400");
+        assert_eq!(a, b);
+        assert!(a[1].is_finite() && a[2].is_finite());
+        let fallback = resolve_print_filters("nonexistent_paper", "TH-KG3", "nonexistent_film");
+        assert_eq!(fallback, DEFAULT_CC);
     }
 }
 

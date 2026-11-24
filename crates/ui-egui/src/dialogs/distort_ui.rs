@@ -7,9 +7,11 @@
 //! Adaptive Wide Angle, Vanishing Point, RAW Develop) live on the dialog host; [`modal_workspace`] and
 //! [`workspace_fields`] read them from there.
 
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use craft::ui::dialog::dialog_id;
+use craft::ui::dialog::{FullWindowWorkspace, WorkspaceCx, WorkspacePass, dialog_id};
+use craft::ui::runtime::env::Label;
 use egui::{Color32, ColorImage};
 use photocraft_doc::{DocId, Document, LayerContent, LayerId};
 use photocraft_geom::Rect;
@@ -366,6 +368,80 @@ pub fn drop_foreign(app: &mut PhotocraftApp, ctx: &egui::Context) {
             app.framework.dialogs.cancel_by_id(ctx, dialog_id(key));
         }
         app.distort.owner = None;
+    }
+}
+
+/// Restores `embed_viewports` when the wrapped workspace's `show` returns or unwinds.
+struct EmbedGuard {
+    ctx: egui::Context,
+    was_embedded: bool,
+}
+
+impl Drop for EmbedGuard {
+    fn drop(&mut self) {
+        self.ctx.set_embed_viewports(self.was_embedded);
+    }
+}
+
+/// Hosts a `FullWindowWorkspace` whose framework implementation calls `.own_window(...)` (such as
+/// RAW Develop and Vanishing Point) inside the main window via `FullWindowHost` instead of
+/// spawning a secondary OS viewport that can collapse to its body size.
+pub(crate) struct InWindowWorkspace<W>(pub(crate) W);
+
+impl<W> InWindowWorkspace<W> {
+    /// Wraps `workspace` so it mounts inside the main window.
+    pub(crate) fn new(workspace: W) -> Self {
+        Self(workspace)
+    }
+}
+
+impl<W> Deref for InWindowWorkspace<W> {
+    type Target = W;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<W> DerefMut for InWindowWorkspace<W> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<W: FullWindowWorkspace> FullWindowWorkspace for InWindowWorkspace<W> {
+    type Source = W::Source;
+    type Event = W::Event;
+    type Result = W::Result;
+
+    const KEY: &'static str = W::KEY;
+
+    fn show(&mut self, ui: &mut egui::Ui, cx: WorkspaceCx<'_, Self::Source>) -> WorkspacePass<Self::Event, Self::Result> {
+        let ctx = ui.ctx().clone();
+        let was_embedded = ctx.embed_viewports();
+        ctx.set_embed_viewports(true);
+        let _guard = EmbedGuard { ctx, was_embedded };
+        self.0.show(ui, cx)
+    }
+
+    fn json_fields(&self, source: &Self::Source) -> Option<Value> {
+        self.0.json_fields(source)
+    }
+
+    fn set_json_field(&mut self, ctx: &egui::Context, source: &Self::Source, field: &str, value: Value) -> Result<(), String> {
+        self.0.set_json_field(ctx, source, field, value)
+    }
+
+    fn confirm(&mut self, ctx: &egui::Context, source: &Self::Source) -> Option<Self::Result> {
+        self.0.confirm(ctx, source)
+    }
+
+    fn ok_failed(&mut self, reason: Label) {
+        self.0.ok_failed(reason);
+    }
+
+    fn closed(&mut self, ctx: &egui::Context) {
+        self.0.closed(ctx);
     }
 }
 

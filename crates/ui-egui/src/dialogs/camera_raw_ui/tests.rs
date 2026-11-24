@@ -2,8 +2,6 @@ use std::sync::Arc;
 
 use craft::host::{PickKind, Picked, ScriptedFiles};
 use craft::imaging::raw::RawDevelopSettings as CameraRaw;
-use craft::imaging::ui::raw_develop::RawDevelopWorkspace;
-use craft::ui::dialog::HostedWorkspace;
 use photocraft_geom::Rect;
 use serde_json::{Value, json};
 
@@ -27,7 +25,7 @@ fn frame(app: &mut PhotocraftApp) {
 /// The settings the open RAW Develop workspace holds. The workspace's session is `CameraRaw`
 /// itself, so there is no conversion.
 fn shown(app: &PhotocraftApp) -> CameraRaw {
-    app.framework.dialogs.get::<HostedWorkspace<RawDevelopWorkspace>>().expect("RAW Develop is open").workspace().session().clone()
+    app.framework.dialogs.get::<Hosted>().expect("RAW Develop is open").workspace().session().clone()
 }
 
 /// The app's state beside the hosted workspace.
@@ -1355,4 +1353,122 @@ fn done_keeps_the_raws_open_when_a_sidecar_write_fails() {
     assert_eq!((r["done"].clone(), r["saved"].clone()), (json!(true), json!([])), "{r}");
     assert!(app.raw.is_none() && !app.ui.status_error, "{}", app.ui.status);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn raw_develop_stays_in_main_window_when_os_viewports_are_enabled() {
+    let (mut app, dng) = raw_app();
+    let ctx = app.ctx().clone();
+    // Simulate a native desktop session where OS viewports are available.
+    ctx.set_embed_viewports(false);
+
+    app.open_bytes("IMG_0001.dng", &dng).unwrap();
+    let raw = take_queued(&mut app).unwrap();
+    open_raw(&mut app, &ctx, raw).unwrap();
+
+    let mut last_output = None;
+    let mut settled = false;
+    for _ in 0..100 {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1440.0, 900.0))),
+            ..Default::default()
+        };
+        app.framework_before_input(&ctx);
+        let mut output = ctx.run_ui(input, |ui| crate::dialogs::run(&mut app, ui));
+        output.textures_delta.clear();
+        assert!(!ctx.embed_viewports(), "embed_viewports must be restored after RAW Develop runs");
+        assert_eq!(
+            output.viewport_output.len(),
+            1,
+            "RAW Develop must stay in root viewport, found: {:?}",
+            output.viewport_output.keys().collect::<Vec<_>>()
+        );
+        assert!(output.viewport_output.contains_key(&egui::ViewportId::ROOT));
+        last_output = Some(output);
+
+        let state = describe(&app);
+        if !state["previewPending"].as_bool().unwrap_or(true) && !state["histogram"].is_null() {
+            settled = true;
+            break;
+        }
+        let _ = craft::ui::runtime::pending::finish_jobs(&ctx, std::time::Duration::from_secs(30));
+    }
+
+    assert!(settled, "RAW Develop preview and histogram should finish settling");
+    assert!(app.framework.dialogs.canvas().is_some(), "RAW Develop canvas workspace must remain mounted");
+    let output = last_output.expect("at least one frame rendered");
+    let has_large_layer = output.shapes.iter().any(|cs| {
+        let r = cs.shape.visual_bounding_rect();
+        r.width() > 1000.0 && r.height() > 700.0
+    }) || ctx.memory(|m| {
+        m.layer_ids().any(|id| {
+            m.area_rect(id.id).is_some_and(|r| r.width() > 1000.0 && r.height() > 700.0)
+        })
+    });
+    assert!(has_large_layer, "RAW Develop should occupy the main window (1440x900)");
+}
+
+#[test]
+#[ignore = "Manual visual snapshot generator (writes PNG to F:\\spektra-ui-preview)"]
+fn dump_raw_develop_preview() {
+    use crate::app::framework::BuildApp;
+
+    let preview_dir = std::path::PathBuf::from(r"F:\spektra-ui-preview");
+    let _ = std::fs::create_dir_all(&preview_dir);
+
+    let theme = crate::theme::AppTheme::studio();
+    let theme_for_raw = theme.clone();
+    let (mut app, dng) = raw_app();
+    // Strictly read-only: never write sidecars or touch user directories.
+    app.services.write = None;
+    app.session.prefs.edit(|p| {
+        p.interface.language = "zh-hans".into();
+        p.raw_defaults.write_xmp_sidecars = false;
+    });
+    app.ui.theme = theme.clone();
+
+    let mut h = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
+        .with_size(egui::vec2(1440.0, 900.0))
+        .build_app(
+            move |ui, app| {
+                app.ui.theme = theme_for_raw.clone();
+                crate::i18n::sync_context(ui.ctx(), "zh-hans");
+                crate::dialogs::run(app, ui);
+            },
+            app,
+        );
+
+    let ctx = h.ctx.clone();
+    PhotocraftApp::setup_context(&ctx, theme);
+    crate::i18n::sync_context(&ctx, "zh-hans");
+    ctx.set_embed_viewports(false);
+
+    let nef_path = std::path::PathBuf::from(r"G:\Work\个人作品\大门踩点\DSC_9042.NEF");
+    {
+        let app_mut = h.state_mut();
+        if let Ok(bytes) = std::fs::read(&nef_path) {
+            app_mut.open_file(&nef_path.to_string_lossy(), &bytes).unwrap();
+        } else {
+            app_mut.open_bytes("IMG_0001.dng", &dng).unwrap();
+        }
+        let raw = take_queued(app_mut).unwrap();
+        open_raw(app_mut, &ctx, raw).unwrap();
+    }
+
+    for _ in 0..100 {
+        h.step();
+        let _ = craft::ui::runtime::pending::finish_jobs(&h.ctx, std::time::Duration::from_secs(30));
+        let state = describe(h.state());
+        if !state["previewPending"].as_bool().unwrap_or(true) && !state["histogram"].is_null() {
+            h.step();
+            break;
+        }
+    }
+
+    assert!(h.state().framework.dialogs.canvas().is_some());
+    assert!(!h.ctx.embed_viewports());
+
+    let opts = egui_kittest::SnapshotOptions::default().output_path(&preview_dir);
+    let _ = h.try_snapshot_options("raw_develop_zh", &opts);
 }

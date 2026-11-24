@@ -283,3 +283,42 @@ fn ok_paints_the_layer_the_workspace_was_opened_on() {
         }
     }
 }
+
+#[test]
+fn vanishing_point_stays_in_main_window_when_os_viewports_are_enabled() {
+    let mut app = app_with_layer();
+    let ctx = app.ctx().clone();
+    ctx.set_embed_viewports(false);
+    begin(&mut app, &ctx).unwrap();
+
+    let mut last_output = None;
+    for _ in 0..4 {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 800.0))),
+            ..Default::default()
+        };
+        app.framework_before_input(&ctx);
+        let mut output = ctx.run_ui(input, |ui| crate::dialogs::run(&mut app, ui));
+        output.textures_delta.clear();
+        assert!(!ctx.embed_viewports(), "embed_viewports must be restored after Vanishing Point runs");
+        assert_eq!(
+            output.viewport_output.len(),
+            1,
+            "Vanishing Point must stay in root viewport, found: {:?}",
+            output.viewport_output.keys().collect::<Vec<_>>()
+        );
+        assert!(output.viewport_output.contains_key(&egui::ViewportId::ROOT));
+        last_output = Some(output);
+    }
+
+    let output = last_output.expect("at least one frame rendered");
+    let has_large_layer = output.shapes.iter().any(|cs| {
+        let r = cs.shape.visual_bounding_rect();
+        r.width() > 900.0 && r.height() > 600.0
+    }) || ctx.memory(|m| {
+        m.layer_ids().any(|id| {
+            m.area_rect(id.id).is_some_and(|r| r.width() > 900.0 && r.height() > 600.0)
+        })
+    });
+    assert!(has_large_layer, "Vanishing Point should occupy the main window (1200x800)");
+}

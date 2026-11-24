@@ -278,7 +278,7 @@ fn open_session(
             open = open.filmstrip(items, current);
         }
         // OK is held: a failed filter command keeps the workspace open with its settings.
-        app.framework.dialogs.open(HostedWorkspace::new(RawDevelopWorkspace::new(open), dyn_source).held_ok());
+        app.framework.dialogs.open(HostedWorkspace::new(crate::distort_ui::InWindowWorkspace::new(RawDevelopWorkspace::new(open)), dyn_source).held_ok());
     }
     app.raw = Some(RawSession {
         layer,

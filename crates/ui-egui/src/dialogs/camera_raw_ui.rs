@@ -67,7 +67,7 @@ const PROXY_SIDE: usize = 900;
 pub(crate) const PARALLEL_MIN_PIXELS: usize = 16 * 1024;
 
 /// The hosted workspace this module opens.
-pub(crate) type Hosted = HostedWorkspace<RawDevelopWorkspace>;
+pub(crate) type Hosted = HostedWorkspace<crate::distort_ui::InWindowWorkspace<RawDevelopWorkspace>>;
 
 /// What a develop leaves for the canvas and the readers: its counts, timings and settings. A newer develop replaces it.
 pub(crate) struct Developed {

@@ -117,7 +117,7 @@ impl RasterSource for SharedPicture {
 }
 
 /// The workspace as the dialog host keeps it.
-type Hosted = HostedWorkspace<VanishingPointWorkspace>;
+type Hosted = HostedWorkspace<crate::distort_ui::InWindowWorkspace<VanishingPointWorkspace>>;
 
 /// The app's side of an open Vanishing Point: what OK needs and what the tests read.
 pub(crate) struct VpApp {
@@ -545,7 +545,7 @@ pub fn begin(app: &mut PhotocraftApp, _ctx: &egui::Context) -> Result<(), String
         .navigation(crate::canvas::document_display::navigation(app))
         .checkerboard(crate::canvas::document_display::checkerboard(app).unwrap_or_default());
     let dynamic: Arc<dyn VanishingPointSource> = source.clone();
-    let dialog = app.framework.dialogs.open(HostedWorkspace::new(VanishingPointWorkspace::new(open), dynamic).held_ok());
+    let dialog = app.framework.dialogs.open(HostedWorkspace::new(crate::distort_ui::InWindowWorkspace::new(VanishingPointWorkspace::new(open)), dynamic).held_ok());
     app.vanishing = Some(VpApp { document, layer, dialog, source });
     app.ui.status = tl!("Vanishing Point: click four corners to create a plane").into();
     Ok(())

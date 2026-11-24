@@ -13,7 +13,7 @@ use crate::{PhotocraftApp, theme};
 /// click, so a rerun pass of the frame adds no second layer.
 pub(crate) fn panel(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     if crate::panels::brand::is_spektra() {
-        let enabled = app.session.is_enabled(crate::spektra_ui::COMMAND);
+        let enabled = app.session.active_job().is_none() && crate::menus::is_enabled(app, crate::spektra_ui::COMMAND);
         let t = theme::Tokens::get(ui.ctx());
         let (fg, bg_normal, bg_hover, border) = if !enabled {
             (t.text_faint, t.field, t.field, t.separator)

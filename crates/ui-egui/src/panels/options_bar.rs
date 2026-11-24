@@ -90,9 +90,24 @@ fn ending(app: &PhotocraftApp, tool: Tool) -> Option<Ending> {
 ///
 /// Each pass applies the commit or cancel its own bar took; a second pass of a frame applies none of the first pass's.
 pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
+    options_bar_with_brand(app, ui, crate::panels::brand::is_spektra());
+}
+
+pub(crate) fn options_bar_with_brand(app: &mut PhotocraftApp, ui: &mut egui::Ui, is_spektra: bool) {
     let tool = app.ui.tool;
     let ending = ending(app, tool);
+    let show_spektra = is_spektra && app.session.active().is_some();
+    let active_job = show_spektra && app.session.active_job().is_some();
+    let spektra_enabled = show_spektra && !active_job && crate::menus::is_enabled(app, crate::spektra_ui::COMMAND);
+    let mut open_spektra = false;
     let mut bar = Bar::new(tl!("Options").to_owned(), BarKind::Options);
+    if show_spektra {
+        bar = bar.trailing(|ui, _| {
+            if spektra_darkroom_pill(ui, spektra_enabled, active_job) {
+                open_spektra = true;
+            }
+        });
+    }
     if let Some(ending) = &ending {
         bar = bar.commit_cancel(ending.commit.clone(), ending.cancel.clone());
     }
@@ -101,6 +116,56 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     if let Some(ending) = ending {
         answer(app, ui, tool, ending.end, &shown.output);
     }
+    if open_spektra
+        && !craft::ui::runtime::measure::active(ui.ctx())
+        && let Err(e) = crate::menus::invoke(app, ui.ctx(), crate::spektra_ui::COMMAND, json!({}))
+    {
+        app.ui.status = e;
+    }
+}
+
+/// Crisp capsule entry point at the far right of the options bar for SpektraFilm Darkroom Studio.
+/// Returns `true` when clicked while enabled.
+fn spektra_darkroom_pill(ui: &mut egui::Ui, enabled: bool, active_job: bool) -> bool {
+    let t = crate::theme::Tokens::get(ui.ctx());
+    let (fg, bg_normal, bg_hover, border) = if !enabled {
+        (t.text_faint, t.field, t.field, t.separator)
+    } else if t.dark() {
+        let a = t.accent;
+        (
+            a,
+            egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), 22),
+            egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), 46),
+            egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), 180),
+        )
+    } else {
+        (t.accent_text, t.accent_soft, t.hover, t.accent_border)
+    };
+    let pill_label = "✦ SpektraFilm 胶片暗房";
+    let font = crate::theme::semibold(11.5);
+    let galley = ui.painter().layout_no_wrap(pill_label.into(), font.clone(), fg);
+    let row_h = ui.spacing().interact_size.y.max(22.0);
+    let pill_w = galley.size().x + 18.0;
+    let sense = if enabled { egui::Sense::click() } else { egui::Sense::hover() };
+    let (alloc_rect, mut resp) = ui.allocate_exact_size(egui::vec2(pill_w, row_h), sense);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, pill_label));
+    if enabled {
+        resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    }
+    let tip = if enabled {
+        "打开 SpektraFilm 81 波长光谱胶片与暗房印相工作台 (Filter › SpektraFilm › Film Simulation…)"
+    } else if active_job {
+        "后台处理进行中，完成后即可进入 SpektraFilm 胶片暗房"
+    } else {
+        "请先选中像素图层或智能对象图层以启用光谱胶片暗房"
+    };
+    resp = resp.on_hover_text(tip);
+    let pill_rect = egui::Rect::from_center_size(alloc_rect.center(), egui::vec2(pill_w, 22.0));
+    let bg = if enabled && resp.hovered() { bg_hover } else { bg_normal };
+    ui.painter().rect_filled(pill_rect, egui::CornerRadius::same(99), bg);
+    ui.painter().rect_stroke(pill_rect, egui::CornerRadius::same(99), egui::Stroke::new(1.0, border), egui::StrokeKind::Inside);
+    ui.painter().text(pill_rect.center(), egui::Align2::CENTER_CENTER, pill_label, font, fg);
+    enabled && resp.clicked()
 }
 
 /// Runs the ending the bar's commit or cancel button asked for.
@@ -134,41 +199,6 @@ fn answer(app: &mut PhotocraftApp, ui: &egui::Ui, tool: Tool, end: End, out: &Ba
 /// The bar's members in order: Home, the tool icon, then the active tool's options.
 fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     lead(app, ui);
-    if crate::panels::brand::is_spektra() && app.session.active().is_some() {
-        let enabled = app.session.is_enabled(crate::spektra_ui::COMMAND);
-        let t = crate::theme::Tokens::get(ui.ctx());
-        let (fg, bg_normal, bg_hover, border) = if !enabled {
-            (t.text_faint, t.field, t.field, t.separator)
-        } else if t.dark() {
-            let a = t.accent;
-            (
-                a,
-                egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), 22),
-                egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), 46),
-                egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), 180),
-            )
-        } else {
-            (t.accent_text, t.accent_soft, t.hover, t.accent_border)
-        };
-        ui.add_enabled_ui(enabled, |ui| {
-            let pill_label = "✦ SpektraFilm 胶片暗房";
-            let galley = ui.painter().layout_no_wrap(pill_label.into(), crate::theme::semibold(11.5), fg);
-            let (p_rect, p_resp) = ui.allocate_exact_size(egui::vec2(galley.size().x + 18.0, 22.0), egui::Sense::click());
-            let p_resp = if enabled { p_resp.on_hover_cursor(egui::CursorIcon::PointingHand) } else { p_resp }
-                .on_hover_text("打开 SpektraFilm 81 波长光谱胶片与暗房印相工作台 (Filter › SpektraFilm › Film Simulation…)")
-                .on_disabled_hover_text("请先选中像素图层或智能对象图层以启用光谱胶片暗房");
-            let bg = if enabled && p_resp.hovered() { bg_hover } else { bg_normal };
-            ui.painter().rect_filled(p_rect, egui::CornerRadius::same(99), bg);
-            ui.painter().rect_stroke(p_rect, egui::CornerRadius::same(99), egui::Stroke::new(1.0, border), egui::StrokeKind::Inside);
-            ui.painter().text(p_rect.center(), egui::Align2::CENTER_CENTER, pill_label, crate::theme::semibold(11.5), fg);
-            if p_resp.clicked()
-                && let Err(e) = crate::menus::invoke(app, ui.ctx(), "filter.spektra.filmSim", json!({}))
-            {
-                app.ui.status = e;
-            }
-        });
-        Divider::vertical().show(ui);
-    }
     if app.ui.transform.is_some() {
         crate::transform_tool::options_bar(app, ui);
         return;
@@ -360,3 +390,151 @@ pub(super) fn pct_action(target: &Value, key: &str, pct: f32, coalesce: Option<S
 #[cfg(test)]
 #[path = "../pattern_stamp_opacity_flow_tests.rs"]
 mod pattern_stamp_opacity_flow_tests;
+
+#[cfg(test)]
+mod spektra_button_tests {
+    use egui::accesskit::Role;
+    use egui::vec2;
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{NodeT, Queryable};
+    use serde_json::json;
+
+    use crate::PhotocraftApp;
+    use crate::state::Tool;
+
+    const PILL_LABEL: &str = "✦ SpektraFilm 胶片暗房";
+
+    fn app() -> Box<PhotocraftApp> {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({"width": 64, "height": 64})).unwrap();
+        app.sync_views();
+        app.ui.tool = Tool::Move;
+        app
+    }
+
+    #[test]
+    fn non_spektra_brand_omits_darkroom_pill() {
+        let app = app();
+        let mut h = Harness::builder().allow_missing_glyphs().with_size(vec2(1280.0, 200.0)).with_context(app.ctx().clone()).build_ui_state(
+            |ui, app: &mut Box<PhotocraftApp>| {
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
+                super::options_bar_with_brand(app, ui, false);
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::AppTheme::studio());
+        h.run_steps(4);
+        assert!(h.query_by_label(PILL_LABEL).is_none());
+    }
+
+    #[test]
+    fn spektra_pill_is_trailing_vertically_centered_and_reopens_on_second_click() {
+        let app = app();
+        let mut h = Harness::builder().allow_missing_glyphs().with_size(vec2(1280.0, 820.0)).with_context(app.ctx().clone()).build_ui_state(
+            |ui, app: &mut Box<PhotocraftApp>| {
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
+                super::options_bar_with_brand(app, ui, true);
+                crate::dialogs::run(app, ui);
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, crate::theme::AppTheme::studio());
+        h.run_steps(4);
+
+        let pill = h.get_by_label(PILL_LABEL);
+        let pill_rect = pill.rect();
+        let combo = h
+            .get_all_by_role(Role::ComboBox)
+            .find(|n| n.accesskit_node().value().as_deref() == Some("Layer") || n.accesskit_node().label().as_deref() == Some("Layer"))
+            .expect("Move tool target dropdown renders in options bar");
+        let combo_rect = combo.rect();
+
+        assert!(
+            pill_rect.min.x > 900.0 && pill_rect.min.x > combo_rect.max.x,
+            "Spektra darkroom pill should sit at far right of options bar: pill={pill_rect:?}, combo={combo_rect:?}"
+        );
+        assert!(
+            (pill_rect.center().y - combo_rect.center().y).abs() <= 1.5,
+            "Spektra darkroom pill should be vertically centered with options bar controls: pill_cy={}, combo_cy={}",
+            pill_rect.center().y,
+            combo_rect.center().y
+        );
+
+        // First open via options-bar button -> Cancel -> second open via options-bar button.
+        pill.click();
+        h.run_steps(5);
+        assert!(
+            h.state().framework.dialogs.get_by_id::<crate::spektra_ui::SpektraDialog>(craft::ui::dialog::dialog_id(crate::spektra_ui::COMMAND)).is_some(),
+            "first click on Spektra darkroom pill must open SpektraDialog"
+        );
+        h.get_by_label(tl!("Cancel")).click();
+        h.run_steps(5);
+        assert!(
+            h.state().framework.dialogs.get_by_id::<crate::spektra_ui::SpektraDialog>(craft::ui::dialog::dialog_id(crate::spektra_ui::COMMAND)).is_none(),
+            "Cancel must close SpektraDialog"
+        );
+
+        h.get_by_label(PILL_LABEL).click();
+        h.run_steps(5);
+        assert!(
+            h.state().framework.dialogs.get_by_id::<crate::spektra_ui::SpektraDialog>(craft::ui::dialog::dialog_id(crate::spektra_ui::COMMAND)).is_some(),
+            "second click on Spektra darkroom pill must open SpektraDialog again"
+        );
+    }
+
+    #[test]
+    #[ignore = "Manual visual snapshot generator (writes PNG to F:\\spektra-ui-preview)"]
+    fn dump_spektra_options_bar_preview() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        let _ = app.run("file.new", json!({"width": 64, "height": 64})).unwrap();
+        app.sync_views();
+        app.ui.tool = Tool::Move;
+        let theme = if let Some(def) = crate::theme::spektra_theme_def() {
+            let appearance = craft::theme::Appearance {
+                mode: craft::theme::ramp::Mode::Dark,
+                contrast: craft::theme::Contrast::Standard,
+                size: craft::theme::Size::Compact,
+                text_size: craft::theme::TextSize::Small,
+                reduced_motion: false,
+            };
+            let resolved = craft::theme::resolve(&def, appearance, None);
+            crate::theme::AppTheme::resolved(def, true, &resolved)
+        } else {
+            crate::theme::AppTheme::studio()
+        };
+        app.session.edit_prefs(|p| p.interface.language = "zh-hans".into());
+        app.ui.theme = theme.clone();
+        let theme_for_ctx = theme.clone();
+        let theme_after = theme.clone();
+        let ctx = app.ctx().clone();
+        PhotocraftApp::setup_context(&ctx, theme);
+        crate::i18n::sync_context(&ctx, "zh-hans");
+        let mut h = Harness::builder().allow_missing_glyphs().with_size(vec2(1440.0, 96.0)).with_context(ctx).build_ui_state(
+            move |ui, app: &mut Box<PhotocraftApp>| {
+                if !ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    return;
+                }
+                app.ui.theme = theme_for_ctx.clone();
+                crate::i18n::sync_context(ui.ctx(), "zh-hans");
+                super::options_bar_with_brand(app, ui, true);
+            },
+            app,
+        );
+        PhotocraftApp::setup_context(&h.ctx, theme_after);
+        crate::i18n::sync_context(&h.ctx, "zh-hans");
+        for _ in 0..4 {
+            h.step();
+        }
+        let preview_dir = std::path::PathBuf::from(r"F:\spektra-ui-preview");
+        let _ = std::fs::create_dir_all(&preview_dir);
+        h.snapshot_options(
+            "spektra_options_bar",
+            &egui_kittest::SnapshotOptions::default().output_path(&preview_dir),
+        );
+        let _ = h.take_snapshot_results();
+    }
+}

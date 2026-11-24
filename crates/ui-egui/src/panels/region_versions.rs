@@ -12,7 +12,15 @@ use crate::color_picker_ui::PickWindow;
 /// The version of the options bar: the Zoom tool's members show the active view, and an open Free Transform shows
 /// its own members in place of the tool's (Escape ends it without a command, #15547).
 pub(crate) fn options_bar(app: &PhotocraftApp) -> u64 {
-    version(app, (view(app), app.ui.transform.is_some()))
+    version(
+        app,
+        (
+            view(app),
+            app.ui.transform.is_some(),
+            app.session.active_job().is_some(),
+            crate::menus::is_enabled(app, crate::spektra_ui::COMMAND),
+        ),
+    )
 }
 
 /// The version of the status bar: the zoom readout of the active view, the status message and the item it shows, the
@@ -68,6 +76,7 @@ fn version(app: &PhotocraftApp, extra: impl Hash) -> u64 {
     app.session.active_generation().hash(&mut hasher);
     app.session.active_layer_changes().hash(&mut hasher);
     app.session.active().map(|st| st.revision).hash(&mut hasher);
+    app.session.active_job().is_some().hash(&mut hasher);
     app.ui.tool.hash(&mut hasher);
     let tools = &app.session.tools;
     for channel in tools.foreground.iter().chain(&tools.background) {
@@ -108,5 +117,57 @@ mod tests {
         changed("the Edit Toolbar drawer", &|app| app.ui.toolbar_drawer = !app.ui.toolbar_drawer, &mut app);
         changed("the toolbar layout", &|app| app.session.prefs.edit(|prefs| prefs.toolbar.hidden.push("Brush".to_string())), &mut app);
         changed("the colours", &|app| app.session.tools.foreground[0] = 0.25, &mut app);
+    }
+
+    #[test]
+    fn options_bar_version_moves_with_command_enablement_and_active_job() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), Default::default());
+        let _ = app.run("file.new", serde_json::json!({"width": 32, "height": 24})).unwrap();
+
+        let v_ready = options_bar(&app);
+        assert!(crate::menus::is_enabled(&app, crate::spektra_ui::COMMAND));
+
+        let _ = app.run("layer.new.group", serde_json::json!({})).unwrap();
+        assert!(!crate::menus::is_enabled(&app, crate::spektra_ui::COMMAND));
+        let v_group = options_bar(&app);
+        assert_ne!(v_group, v_ready, "selecting non-pixel group layer disables Spektra command and invalidates options_bar version");
+
+        let _ = app.run("layer.select", serde_json::json!({"layer": "Background"})).unwrap();
+        assert!(crate::menus::is_enabled(&app, crate::spektra_ui::COMMAND));
+        let v_pixel = options_bar(&app);
+        assert_ne!(v_pixel, v_group, "selecting pixel layer re-enables Spektra command and invalidates options_bar version");
+
+        let gate = Arc::new(AtomicBool::new(false));
+        let open = gate.clone();
+        let _ = app
+            .session
+            .start_job(
+                "test.bg",
+                serde_json::json!({}),
+                "Busy",
+                true,
+                move |ctx| {
+                    while !open.load(Ordering::Relaxed) {
+                        ctx.check()?;
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                    Ok(())
+                },
+                |_, ()| Ok(serde_json::json!({})),
+            )
+            .unwrap();
+        let job_id = app.session.active_job().unwrap().id;
+        let v_busy = options_bar(&app);
+        assert_ne!(v_busy, v_pixel, "active background job invalidates options_bar version without changing doc revision");
+
+        gate.store(true, Ordering::Relaxed);
+        let _ = app.session.wait_job(job_id).unwrap();
+        assert!(app.session.active_job().is_none());
+        assert_eq!(options_bar(&app), v_pixel, "finishing no-op background job restores options_bar version");
     }
 }

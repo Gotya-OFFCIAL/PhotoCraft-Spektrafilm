@@ -607,6 +607,7 @@ pub struct SpektraAnswer {
 /// Hosted 3-column darkroom dialog for `filter.spektra.filmSim`.
 pub struct SpektraDialog {
     id: DialogId,
+    open: bool,
     fields: Map<String, Value>,
     captured: Value,
     fed: FedPreview,
@@ -619,6 +620,7 @@ impl SpektraDialog {
     fn new(fields: Map<String, Value>, captured: Value) -> Self {
         Self {
             id: dialog_id(COMMAND),
+            open: true,
             fields,
             captured,
             fed: FedPreview { base_k: 1, ..Default::default() },
@@ -651,7 +653,7 @@ impl StackDialog for SpektraDialog {
     }
 
     fn show(&mut self, ui: &mut Ui, _stack: &DialogStack) -> Option<DialogResult<SpektraAnswer>> {
-        let SpektraDialog { id, fields, captured, fed, .. } = self;
+        let SpektraDialog { id, open, fields, captured, fed, .. } = self;
         let preview_before = fields.get("__preview").and_then(Value::as_bool).unwrap_or(true);
         let mut footer_preview = preview_before;
         let search_focused_id = egui::Id::unique("spektra-search-focused");
@@ -666,6 +668,7 @@ impl StackDialog for SpektraDialog {
         // `.resizable(true)` must come before `.overlay(...)` so `Overlay::dialog()` switches
         // from `OverlayFit::ContentCapped` to `OverlayFit::Resizable`.
         let shown = Dialog::new(Label::from(tl!("Film Simulation").to_string()))
+            .opened(Bind::bound(open))
             .resizable(true)
             .overlay(|overlay| overlay.size(init_size).min_size(MIN_SIZE).body_scroll(false))
             .remember(SaveKey::named(WINDOW_SAVE_SCOPE))
@@ -2775,5 +2778,45 @@ mod tests {
         h.run_steps(3);
         let d = h.state().framework.dialogs.get_by_id::<SpektraDialog>(id).unwrap();
         assert_eq!(d.fields().get("film").and_then(Value::as_str), Some("fujifilm_velvia_100"));
+    }
+
+    #[test]
+    fn spektra_dialog_reopens_after_cancel_and_ok_even_with_stale_false_window_setting() {
+        let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        app.run("file.new", json!({"width": 32, "height": 24})).unwrap();
+        // Simulate legacy config.toml where `Dialog::remember(WINDOW_SAVE_SCOPE)` persisted `false` without an `opened` binding.
+        Remembered::<bool>::new(WINDOW_SAVE_SCOPE).store(app.framework.host(), &false);
+
+        let id1 = crate::dialogs::open_command_dialog(&mut app, COMMAND, "Film Simulation…").unwrap();
+        let mut h = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(vec2(1280.0, 820.0)).build_app(
+            |ui, app| {
+                crate::dialogs::run(app, ui);
+            },
+            app,
+        );
+        h.run_steps(5);
+
+        assert!(h.state().framework.dialogs.get_by_id::<SpektraDialog>(id1).is_some());
+        h.get_by_label(tl!("Cancel")).click();
+        h.run_steps(5);
+        assert!(
+            h.state().framework.dialogs.get_by_id::<SpektraDialog>(id1).is_none(),
+            "Cancel should close the first SpektraDialog instance"
+        );
+
+        let id2 = crate::dialogs::open_command_dialog(h.state_mut(), COMMAND, "Film Simulation…").unwrap();
+        h.run_steps(5);
+        assert!(h.state().framework.dialogs.get_by_id::<SpektraDialog>(id2).is_some());
+        h.get_by_label(tl!("OK")).click();
+        h.run_steps(6);
+        assert!(
+            h.state().framework.dialogs.get_by_id::<SpektraDialog>(id2).is_none(),
+            "OK should close the second SpektraDialog instance"
+        );
+
+        let id3 = crate::dialogs::open_command_dialog(h.state_mut(), COMMAND, "Film Simulation…").unwrap();
+        h.run_steps(5);
+        assert!(h.state().framework.dialogs.get_by_id::<SpektraDialog>(id3).is_some());
+        assert!(h.query_by_label(tl!("Cancel")).is_some(), "Third reopen must render footer instead of being hidden by SaveKey");
     }
 }

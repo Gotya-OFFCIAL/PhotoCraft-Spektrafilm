@@ -22,7 +22,7 @@ use std::time::Duration;
 use craft::behavior::PixelSize;
 use craft::imaging::raw::Demosaic as FrameworkDemosaic;
 use craft::imaging::scopes::ClippingMask;
-use craft::imaging::ui::raw_develop::{RawDevelopEvent, RawDevelopResult, RawDevelopSource, RawDevelopWorkspace, RawFinish, RawPreviewRequest};
+use craft::imaging::ui::raw_develop::{RawDevelopSource, RawFinish, RawPreviewRequest};
 use craft::imaging::ui::scopes::{ScopeFrame, ScopeReadout};
 use craft::imaging::ui::wide_angle::PreviewDone;
 use craft::ui::canvas::{PixelRect, RasterSource};
@@ -43,6 +43,8 @@ use crate::dialogs::camera_raw_detail_ui::DetailPreview;
 use crate::dialogs::camera_raw_scope_ui as scope_ui;
 use crate::dialogs::shared_picture::SharedPicture;
 
+mod acr_widgets;
+mod acr_workspace;
 mod convert;
 mod filmstrip;
 mod menu;
@@ -50,6 +52,7 @@ mod open;
 pub(crate) mod proxy;
 mod sidecar;
 
+use acr_workspace::{AcrDevelopEvent, AcrDevelopResult, AcrDevelopWorkspace};
 pub use filmstrip::HeldRaw;
 pub use menu::menu;
 pub use open::{
@@ -67,7 +70,7 @@ const PROXY_SIDE: usize = 900;
 pub(crate) const PARALLEL_MIN_PIXELS: usize = 16 * 1024;
 
 /// The hosted workspace this module opens.
-pub(crate) type Hosted = HostedWorkspace<crate::distort_ui::InWindowWorkspace<RawDevelopWorkspace>>;
+pub(crate) type Hosted = HostedWorkspace<AcrDevelopWorkspace>;
 
 /// What a develop leaves for the canvas and the readers: its counts, timings and settings. A newer develop replaces it.
 pub(crate) struct Developed {
@@ -554,11 +557,11 @@ pub(crate) fn take_with(app: &mut PhotocraftApp, ctx: &egui::Context) -> Option<
     let events = hosted_mut(app).map(Hosted::take_events).unwrap_or_default();
     for event in events {
         let outcome = match event {
-            RawDevelopEvent::Show(index) => filmstrip::show_raw(app, ctx, index).map(|()| Value::Null),
-            RawDevelopEvent::SaveSettings => sidecar::save_settings(app),
-            RawDevelopEvent::LoadSettings => sidecar::load_settings(app),
+            AcrDevelopEvent::Show(index) => filmstrip::show_raw(app, ctx, index).map(|()| Value::Null),
+            AcrDevelopEvent::SaveSettings => sidecar::save_settings(app),
+            AcrDevelopEvent::LoadSettings => sidecar::load_settings(app),
             // The develop is keyed by the settings, so an edit needs no answer here.
-            _ => continue,
+            AcrDevelopEvent::Settings(_) => continue,
         };
         sidecar::report_file_error(app, outcome);
     }
@@ -589,14 +592,14 @@ pub(crate) fn take_with(app: &mut PhotocraftApp, ctx: &egui::Context) -> Option<
 
 /// Closes RAW Develop without acting on it: a request that opened it and was then refused.
 pub(crate) fn dismiss(app: &mut PhotocraftApp, ctx: &egui::Context) {
-    app.framework.dialogs.cancel_by_id(ctx, dialog_id(RawDevelopWorkspace::KEY));
+    app.framework.dialogs.cancel_by_id(ctx, dialog_id(AcrDevelopWorkspace::KEY));
     let _ = app.framework.dialogs.take::<Hosted>();
     app.raw = None;
 }
 
 /// OK of the workspace: the command (or the open) its target asks for. A failure leaves the session as it is, so the
 /// workspace stays open with its settings.
-fn finish(app: &mut PhotocraftApp, result: &RawDevelopResult) -> Result<Value, String> {
+fn finish(app: &mut PhotocraftApp, result: &AcrDevelopResult) -> Result<Value, String> {
     let session = app.raw.as_ref().ok_or(tl!("RAW Develop isn't open"))?;
     let (layer, target, original) = (session.layer, session.target, session.original.clone());
     let raw = session.raw_open.clone();

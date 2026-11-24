@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use craft::behavior::PixelSize;
-use craft::imaging::ui::raw_develop::{RawDevelopOpen, RawDevelopSource, RawDevelopWorkspace, RawFilmItem, RawTarget};
+use craft::imaging::ui::raw_develop::{RawDevelopOpen, RawFilmItem, RawTarget};
 use craft::ui::dialog::HostedWorkspace;
 
 use super::open::{Coverage, RawOpen, Target};
@@ -259,11 +259,10 @@ fn open_session(
         Target::SmartFilter(_) => RawTarget::SmartFilter,
         Target::OpenRaw => RawTarget::OpenRaw,
     };
-    let dyn_source: Arc<dyn RawDevelopSource> = source.clone();
     if showing_another {
         let (_, current) = film.unwrap_or_default();
         if let Some(hosted) = hosted_mut(app) {
-            hosted.set_source(dyn_source);
+            hosted.set_source(source.clone());
             hosted.workspace_mut().show_item(current, settings, original.clone(), demosaic);
         }
     } else {
@@ -278,7 +277,7 @@ fn open_session(
             open = open.filmstrip(items, current);
         }
         // OK is held: a failed filter command keeps the workspace open with its settings.
-        app.framework.dialogs.open(HostedWorkspace::new(crate::distort_ui::InWindowWorkspace::new(RawDevelopWorkspace::new(open)), dyn_source).held_ok());
+        app.framework.dialogs.open(HostedWorkspace::new(super::acr_workspace::AcrDevelopWorkspace::new(open), source.clone()).held_ok());
     }
     app.raw = Some(RawSession {
         layer,

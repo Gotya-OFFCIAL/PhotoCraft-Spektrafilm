@@ -1409,14 +1409,140 @@ fn raw_develop_stays_in_main_window_when_os_viewports_are_enabled() {
 }
 
 #[test]
+fn acr_white_balance_eyedropper_neutralizes_color_cast() {
+    use super::acr_workspace::compute_wb_from_rgb;
+
+    // Warm sample (excess red, low blue) must yield negative temperature (cooler).
+    let (temp_warm, tint_warm) = compute_wb_from_rgb([0.55, 0.42, 0.30]).expect("valid warm sample");
+    assert!(temp_warm < -20.0 && temp_warm >= -100.0, "expected cool shift, got temp={temp_warm}");
+    assert!(tint_warm.abs() <= 100.0);
+
+    // Check inverse property against white_balance_gains: gains * sample produces nearly equal channels.
+    let g_warm = photocraft_algo::camera_raw::white_balance_gains(temp_warm, tint_warm);
+    let out = [0.55 * g_warm[0], 0.42 * g_warm[1], 0.30 * g_warm[2]];
+    assert!((out[0] - out[2]).abs() < 0.02, "R/B must equalize: {out:?}");
+    assert!((out[1] - out[0]).abs() < 0.02, "G must match R/B average: {out:?}");
+
+    // Green cast (excess green) must yield positive tint (toward magenta).
+    let (temp_g, tint_g) = compute_wb_from_rgb([0.32, 0.44, 0.32]).expect("valid green cast sample");
+    assert!(temp_g.abs() < 1.0, "neutral R/B needs ~0 temp: {temp_g}");
+    assert!(tint_g > 30.0 && tint_g <= 100.0, "expected magenta shift, got tint={tint_g}");
+
+    // Extreme values stay safely clamped to [-100, 100], and black rejects cleanly.
+    let (tc, tnc) = compute_wb_from_rgb([0.95, 0.02, 0.02]).expect("extreme sample still clamps");
+    assert!((-100.0..=100.0).contains(&tc) && (-100.0..=100.0).contains(&tnc));
+    assert!(compute_wb_from_rgb([0.0, 0.0, 0.0]).is_none());
+}
+
+#[test]
+fn acr_split_view_and_before_after_toggle() {
+    use super::acr_workspace::SplitRaster;
+    use craft::ui::canvas::{PixelRect, RasterSource};
+
+    let (mut app, dng) = raw_app();
+    let ctx = app.ctx().clone();
+    app.open_bytes("IMG_0001.dng", &dng).unwrap();
+    let raw = take_queued(&mut app).unwrap();
+    open_raw(&mut app, &ctx, raw).unwrap();
+    settle(&mut app);
+
+    let after = develop(&mut app, &ctx, json!({"ui": {"set": {"exposure": 1.2}}}));
+    let rev = after["previewRevision"].as_u64().unwrap();
+
+    // Toggling Before/After must not queue a new preview develop.
+    let before = develop(&mut app, &ctx, json!({"ui": {"before": true}}));
+    assert_eq!(before["before"], true);
+    assert_eq!(before["histogram"]["source"], "before");
+    assert_eq!(before["previewRevision"], rev);
+
+    // SplitRaster outputs before pixels strictly to the left of split_x and after pixels at/right of split_x.
+    let src = session(&app).source.clone();
+    let split_x = (src.full_w as i32) / 2;
+    let split = SplitRaster::new(src.before(), src.after(), split_x);
+    let size = split.size();
+    let w = size.width as usize;
+    let h = 1usize;
+    let region = PixelRect::new(0, (src.full_h as i32) / 2, size.width as i32, (src.full_h as i32) / 2 + 1);
+    let mut split_img = egui::ColorImage::new([w, h], vec![egui::Color32::TRANSPARENT; w]);
+    let mut before_img = egui::ColorImage::new([w, h], vec![egui::Color32::TRANSPARENT; w]);
+    let mut after_img = egui::ColorImage::new([w, h], vec![egui::Color32::TRANSPARENT; w]);
+    split.read(region, 1, &mut split_img);
+    src.before().read(region, 1, &mut before_img);
+    src.after().read(region, 1, &mut after_img);
+
+    let left_ix = (split_x as usize).saturating_sub(2);
+    let right_ix = (split_x as usize + 2).min(w - 1);
+    assert_eq!(split_img.pixels[left_ix], before_img.pixels[left_ix], "left of split shows Before");
+    assert_eq!(split_img.pixels[right_ix], after_img.pixels[right_ix], "right of split shows After");
+    assert_ne!(before_img.pixels[right_ix], after_img.pixels[right_ix], "exposure +1.2 visibly alters After");
+}
+
+#[test]
+fn acr_per_section_reset_and_undo_history() {
+    let (mut app, dng) = raw_app();
+    let ctx = app.ctx().clone();
+    app.open_bytes("IMG_0001.dng", &dng).unwrap();
+    let raw = take_queued(&mut app).unwrap();
+    open_raw(&mut app, &ctx, raw).unwrap();
+    settle(&mut app);
+
+    menu(&mut app, &ctx, "filter.cameraRaw", &json!({"ui": {"set": {"exposure": 0.75}}})).unwrap().unwrap();
+    menu(&mut app, &ctx, "filter.cameraRaw", &json!({"ui": {"set": {"hslSat": [0, 25, 0, 0, 0, 0, 0, 0]}}})).unwrap().unwrap();
+    assert_eq!(shown(&app).exposure, 0.75);
+    assert_eq!(shown(&app).hsl_sat[1], 25.0);
+
+    // Resetting Color Mixer only clears HSL arrays while preserving Basic exposure.
+    menu(&mut app, &ctx, "filter.cameraRaw", &json!({"ui": {"set": {"hslSat": [0, 0, 0, 0, 0, 0, 0, 0]}}})).unwrap().unwrap();
+    assert_eq!(shown(&app).exposure, 0.75);
+    assert_eq!(shown(&app).hsl_sat[1], 0.0);
+
+    // Undo restores Color Mixer orange saturation while preserving exposure.
+    menu(&mut app, &ctx, "filter.cameraRaw", &json!({"ui": {"undo": true}})).unwrap().unwrap();
+    assert_eq!(shown(&app).exposure, 0.75);
+    assert_eq!(shown(&app).hsl_sat[1], 25.0);
+
+    // Undo once more reverts the Color Mixer change while still keeping exposure.
+    menu(&mut app, &ctx, "filter.cameraRaw", &json!({"ui": {"undo": true}})).unwrap().unwrap();
+    assert_eq!(shown(&app).exposure, 0.75);
+    assert_eq!(shown(&app).hsl_sat[1], 0.0);
+
+    // Undo once more clears exposure back to 0.
+    menu(&mut app, &ctx, "filter.cameraRaw", &json!({"ui": {"undo": true}})).unwrap().unwrap();
+    assert_eq!(shown(&app).exposure, 0.0);
+    assert_eq!(shown(&app).hsl_sat[1], 0.0);
+
+    // Redo restores both edit steps cleanly.
+    menu(&mut app, &ctx, "filter.cameraRaw", &json!({"ui": {"redo": true}})).unwrap().unwrap();
+    menu(&mut app, &ctx, "filter.cameraRaw", &json!({"ui": {"redo": true}})).unwrap().unwrap();
+    assert_eq!(shown(&app).exposure, 0.75);
+    assert_eq!(shown(&app).hsl_sat[1], 25.0);
+}
+
+#[test]
 #[ignore = "Manual visual snapshot generator (writes PNG to F:\\spektra-ui-preview)"]
 fn dump_raw_develop_preview() {
     use crate::app::framework::BuildApp;
 
+    fn spektra_preview_theme() -> crate::theme::AppTheme {
+        if let Some(def) = crate::theme::spektra_theme_def() {
+            let appearance = craft::theme::Appearance {
+                mode: craft::theme::ramp::Mode::Dark,
+                contrast: craft::theme::Contrast::Standard,
+                size: craft::theme::Size::Compact,
+                text_size: craft::theme::TextSize::Small,
+                reduced_motion: false,
+            };
+            let resolved = craft::theme::resolve(&def, appearance, None);
+            crate::theme::AppTheme::resolved(def, true, &resolved)
+        } else {
+            crate::theme::AppTheme::studio()
+        }
+    }
+
     let preview_dir = std::path::PathBuf::from(r"F:\spektra-ui-preview");
     let _ = std::fs::create_dir_all(&preview_dir);
 
-    let theme = crate::theme::AppTheme::studio();
+    let theme = spektra_preview_theme();
     let theme_for_raw = theme.clone();
     let (mut app, dng) = raw_app();
     // Strictly read-only: never write sidecars or touch user directories.
@@ -1470,5 +1596,16 @@ fn dump_raw_develop_preview() {
     assert!(!h.ctx.embed_viewports());
 
     let opts = egui_kittest::SnapshotOptions::default().output_path(&preview_dir);
-    let _ = h.try_snapshot_options("raw_develop_zh", &opts);
+    let _ = h.try_snapshot_options("raw_develop_acr_basic_zh", &opts);
+
+    // Switch to Split comparison + Color Grading wheels visible to visually inspect both.
+    if let Some(hosted) = hosted_mut(h.state_mut()) {
+        hosted.workspace_mut().set_view_mode_for_test(super::acr_workspace::ViewMode::Split, 0.52);
+    }
+    super::acr_widgets::set_section_open(&h.ctx, "basic", false);
+    super::acr_widgets::set_section_open(&h.ctx, "grading", true);
+    for _ in 0..3 {
+        h.step();
+    }
+    let _ = h.try_snapshot_options("raw_develop_acr_split_zh", &opts);
 }
